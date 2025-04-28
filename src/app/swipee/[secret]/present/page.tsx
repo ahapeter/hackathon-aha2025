@@ -6,6 +6,8 @@ import { Box, Button, Typography, Container, CircularProgress } from '@mui/mater
 import { PlayArrow, Stop } from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
 import { SwipeeConfigs, SwipeeState } from '@/modules/swipee/types';
+import { connectToGame, disconnectFromGame, sendGameState } from '@/shared/services/mqttService';
+import { useParams, useSearchParams } from 'next/navigation';
 
 interface PresentPageProps {
   params: {
@@ -40,7 +42,9 @@ const buttonStyle = {
   transition: 'all 0.2s ease',
 };
 
-export default function PresentPage({ params, searchParams }: PresentPageProps) {
+export default function PresentPage() {
+  const { secret } = useParams();
+  const searchParams = useSearchParams();
   const { connectMQTT, disconnectMQTT } = useSwipeeStore();
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,7 +56,7 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
     timeSpent: 0
   });
 
-  // Load game state from API
+  // Load game state from API and setup MQTT
   useEffect(() => {
     const loadGameState = async () => {
       try {
@@ -60,13 +64,16 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
         setError(null);
 
         const gameStore = await APIService.getGameStore<SwipeeConfigs>(
-          searchParams.presentationId,
-          searchParams.slideId
+          searchParams.get('presentationId') || '',
+          searchParams.get('slideId') || ''
         );
 
         if (!gameStore) {
-          // Initialize new game if not found
-          await APIService.initGame(searchParams.presentationId, searchParams.slideId, {});
+          await APIService.initGame(
+            searchParams.get('presentationId') || '', 
+            searchParams.get('slideId') || '', 
+            {}
+          );
           setGameState({
             isStarted: false,
             questions: [],
@@ -74,7 +81,6 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
             timeSpent: 0
           });
         } else {
-          // Check if game is running from the latest state
           const latestState = gameStore.states[gameStore.states.length - 1];
           const isStarted = latestState?.event_name === 'STARTED';
           setGameState({
@@ -88,9 +94,15 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
           }
         }
 
-        // Connect to MQTT for real-time updates
-        connectMQTT(`swipee/game/${searchParams.presentationId}`);
+        // Connect to MQTT after loading game state
+        const presentationId = searchParams.get('presentationId');
+        if (presentationId) {
+          console.log('Connecting to MQTT with presentationId:', presentationId);
+          await connectToGame(presentationId);
+        }
+
       } catch (err) {
+        console.error('Error loading game state:', err);
         setError('Failed to load game state. Please try again.');
       } finally {
         setIsLoading(false);
@@ -100,9 +112,9 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
     loadGameState();
 
     return () => {
-      disconnectMQTT();
+      disconnectFromGame();
     };
-  }, [searchParams.presentationId, searchParams.slideId, connectMQTT, disconnectMQTT]);
+  }, [searchParams]);
 
   // Timer effect
   useEffect(() => {
@@ -117,49 +129,33 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
     };
   }, [gameState.isStarted]);
 
-  const handleStart = async () => {
+  const handleStartGame = async () => {
     try {
-      const success = await APIService.updateGameState(
-        searchParams.presentationId,
-        searchParams.slideId,
-        'event',
-        { event_name: 'STARTED', timestamp: Date.now() }
-      );
-
-      if (success) {
-        setTimeElapsed(0);
-        setGameState(prev => ({
-          ...prev,
-          isStarted: true,
-          timeSpent: 0
-        }));
-      } else {
-        setError('Failed to start game. Please try again.');
-      }
+      await sendGameState(secret as string, true);
+      setGameState(prev => ({
+        ...prev,
+        isStarted: true,
+        timeSpent: 0
+      }));
+      setTimeElapsed(0);
+      setError(null);
     } catch (err) {
-      setError('Failed to start game. Please try again.');
+      setError('Failed to start game');
+      console.error('Start game error:', err);
     }
   };
 
-  const handleStop = async () => {
+  const handleStopGame = async () => {
     try {
-      const success = await APIService.updateGameState(
-        searchParams.presentationId,
-        searchParams.slideId,
-        'event',
-        { event_name: 'STOPPED', timestamp: Date.now() }
-      );
-
-      if (success) {
-        setGameState(prev => ({
-          ...prev,
-          isStarted: false
-        }));
-      } else {
-        setError('Failed to stop game. Please try again.');
-      }
+      await sendGameState(secret as string, false);
+      setGameState(prev => ({
+        ...prev,
+        isStarted: false
+      }));
+      setError(null);
     } catch (err) {
-      setError('Failed to stop game. Please try again.');
+      setError('Failed to stop game');
+      console.error('Stop game error:', err);
     }
   };
 
@@ -285,7 +281,7 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
             <Button
               variant="contained"
               startIcon={<Stop />}
-              onClick={handleStop}
+              onClick={handleStopGame}
               sx={{
                 ...buttonStyle,
                 bgcolor: COLORS.pink,
@@ -302,7 +298,7 @@ export default function PresentPage({ params, searchParams }: PresentPageProps) 
           <Button
             variant="contained"
             startIcon={<PlayArrow />}
-            onClick={handleStart}
+            onClick={handleStartGame}
             size="large"
             sx={{
               ...buttonStyle,

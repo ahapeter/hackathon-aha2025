@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useSwipeeStore } from '@/modules/swipee/store/swipeeStore';
 import { Box, Typography, Container, Paper, CircularProgress, Stack, IconButton } from '@mui/material';
+import { useParams } from 'next/navigation';
+import { connectToGame, disconnectFromGame, onGameStateChange, offGameStateChange, MqttMessage } from '@/shared/services/mqttService';
 import TinderCard from 'react-tinder-card';
 import { SwipeeQuestion, SwipeeState, SwipeeConfigs } from '@/modules/swipee/types';
 import { APIService } from '@/shared/services/apiService';
@@ -56,7 +58,6 @@ const buttonStyle = {
 };
 
 export default function AudiencePage({ searchParams }: AudiencePageProps) {
-  const { connectMQTT, disconnectMQTT } = useSwipeeStore();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gameState, setGameState] = useState<SwipeeState>({
@@ -97,19 +98,26 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
             currentQuestionIndex: isStarted ? 0 : -1,
             timeSpent: isStarted ? Math.floor((Date.now() - latestState.timestamp) / 1000) : 0
           });
-        } else {
-          setGameState({
-            isStarted,
-            questions: [],
-            currentQuestionIndex: -1,
-            timeSpent: isStarted ? Math.floor((Date.now() - latestState.timestamp) / 1000) : 0
-          });
         }
 
-        // Connect to MQTT for real-time updates
-        connectMQTT(`swipee/game/${searchParams.presentationId}`);
+        // Connect to MQTT
+        await connectToGame(searchParams.presentationId);
+        
+        // Subscribe to game state changes
+        onGameStateChange((message: MqttMessage) => {
+          if (message.type === 'GAME_STATE') {
+            setGameState(prev => ({
+              ...prev,
+              isStarted: message.data.isStarted,
+              currentQuestionIndex: message.data.isStarted ? 0 : -1,
+              timeSpent: message.data.isStarted ? 0 : prev.timeSpent
+            }));
+          }
+        });
+
       } catch (err) {
         setError('Failed to load game state. Please try again.');
+        console.error('Game state loading error:', err);
       } finally {
         setIsLoading(false);
       }
@@ -118,9 +126,10 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
     loadGameState();
 
     return () => {
-      disconnectMQTT();
+      offGameStateChange(() => {});
+      disconnectFromGame();
     };
-  }, [searchParams.presentationId, searchParams.slideId, connectMQTT, disconnectMQTT]);
+  }, [searchParams.presentationId, searchParams.slideId]);
 
   // Initialize score service
   useEffect(() => {
@@ -224,12 +233,52 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
 
   if (!gameState.isStarted) {
     return (
-      <Container maxWidth="sm" sx={{ py: 4 }}>
-        <Typography variant="h5" align="center" gutterBottom>
-          Waiting for the game to start...
+      <Container maxWidth="sm" sx={{ 
+        py: 6,
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: COLORS.darkGray,
+      }}>
+        <Typography 
+          variant="h4" 
+          sx={{ 
+            fontWeight: 700,
+            textAlign: 'center',
+            mb: 3,
+          }}
+        >
+          Waiting for Game to Start
         </Typography>
-        <Typography variant="body1" align="center" color="text.secondary">
-          The host will start the game soon.
+        <CircularProgress 
+          size={64} 
+          sx={{ 
+            color: COLORS.teal,
+            mb: 4,
+          }} 
+        />
+        <Typography 
+          variant="body1" 
+          sx={{ 
+            textAlign: 'center',
+            color: COLORS.darkGray,
+            opacity: 0.7,
+          }}
+        >
+          The host will start the game soon. Get ready to swipe!
+        </Typography>
+        <Typography 
+          variant="body2" 
+          sx={{ 
+            mt: 2,
+            textAlign: 'center',
+            color: COLORS.darkGray,
+            opacity: 0.5,
+          }}
+        >
+          Playing as: {searchParams.audienceName} {searchParams.audienceEmoji}
         </Typography>
       </Container>
     );
