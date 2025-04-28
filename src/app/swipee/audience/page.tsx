@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useSwipeeStore } from '@/modules/swipee/store/swipeeStore';
-import { Box, Typography, Container, Paper, CircularProgress, Stack, IconButton } from '@mui/material';
+import { Box, Typography, Container, Paper, CircularProgress, Stack, IconButton, Button } from '@mui/material';
 import { useParams } from 'next/navigation';
 import { connectToGame, disconnectFromGame, onGameStateChange, offGameStateChange, MqttMessage } from '@/shared/services/mqttService';
 import TinderCard from 'react-tinder-card';
@@ -309,15 +309,6 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
             Swipe right if you think it's correct, left if you think it's wrong
           </Typography>
         )}
-        <Typography 
-          variant="body1" 
-          sx={{ 
-            color: 'text.secondary',
-            fontSize: '1rem',
-          }}
-        >
-          Playing as: {searchParams.audienceName} {searchParams.audienceEmoji}
-        </Typography>
       </Box>
 
       <Box sx={{ 
@@ -581,8 +572,9 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
             mt: 4,
             gap: 4
           }}>
-            <IconButton 
+            <Button 
               onClick={() => handleButtonSwipe('left')} 
+              variant="contained"
               sx={{ 
                 ...buttonStyle,
                 bgcolor: COLORS.pink,
@@ -593,10 +585,11 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
                 }
               }}
             >
-              <ThumbDown sx={{ fontSize: 32 }} />
-            </IconButton>
-            <IconButton 
+              False
+            </Button>
+            <Button 
               onClick={() => handleButtonSwipe('right')} 
+              variant="contained"
               sx={{ 
                 ...buttonStyle,
                 bgcolor: COLORS.teal,
@@ -607,8 +600,8 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
                 }
               }}
             >
-              <ThumbUp sx={{ fontSize: 32 }} />
-            </IconButton>
+              True
+            </Button>
           </Box>
         </>
       )}
