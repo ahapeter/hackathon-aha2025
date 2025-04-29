@@ -10,6 +10,7 @@ export interface SwipeeQuestion {
 }
 
 export interface SwipeeConfigs {
+  title: string;
   questions: SwipeeQuestion[];
 }
 

@@ -34,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
 import { SwipeeQuestion, SwipeeOption } from '@/modules/swipee/types';
+import { v4 as uuidv4 } from 'uuid';
 
 interface EditPageProps {
   searchParams: {
@@ -254,6 +255,7 @@ const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) =
             size="small"
             value={option.title}
             onChange={(e) => handleOptionChange('title', e.target.value)}
+            placeholder="Option title"
             sx={optionStyle(option.isCorrect)}
           />
         </Box>
@@ -318,6 +320,7 @@ export default function EditPage({ searchParams }: EditPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<SwipeeQuestion[]>([]);
+  const [title, setTitle] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -328,13 +331,14 @@ export default function EditPage({ searchParams }: EditPageProps) {
         setIsLoading(true);
         setError(null);
 
-        const gameStore = await APIService.getGameStore<{ questions: SwipeeQuestion[] }>(
+        const gameStore = await APIService.getGameStore<{ questions: SwipeeQuestion[]; title: string }>(
           searchParams.presentationId,
           searchParams.slideId
         );
 
         if (gameStore) {
           setQuestions(gameStore.configs?.questions || []);
+          setTitle(gameStore.configs?.title || '');
         }
       } catch (err) {
         setError('Failed to load questions. Please try again.');
@@ -364,7 +368,7 @@ export default function EditPage({ searchParams }: EditPageProps) {
         const success = await APIService.initGame(
           searchParams.presentationId,
           searchParams.slideId,
-          { questions }
+          { questions, title }
         );
 
         if (!success) {
@@ -383,11 +387,11 @@ export default function EditPage({ searchParams }: EditPageProps) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [questions, searchParams.presentationId, searchParams.slideId]);
+  }, [questions, title, searchParams.presentationId, searchParams.slideId]);
 
   const handleAddQuestion = () => {
     const newQuestion: SwipeeQuestion = {
-      id: Date.now().toString(),
+      id: uuidv4(),
       option: {
         title: '',
         imageUrl: '',
@@ -444,6 +448,15 @@ export default function EditPage({ searchParams }: EditPageProps) {
           </Box>
         )}
       </Box>
+
+      <TextField
+        fullWidth
+        variant="outlined"
+        label="Slide Title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        sx={{ mb: 4 }}
+      />
 
       {error && (
         <Paper 

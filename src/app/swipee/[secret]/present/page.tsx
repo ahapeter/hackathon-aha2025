@@ -271,10 +271,6 @@ const PreviewLayout = ({ questions }: { questions: SwipeeQuestion[] }) => {
 };
 
 export default function PresentPage() {
-  const { secret } = useParams();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const [timeElapsed, setTimeElapsed] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gameState, setGameState] = useState<SwipeeState>({
@@ -283,12 +279,15 @@ export default function PresentPage() {
     currentQuestionIndex: -1,
     timeSpent: 0
   });
+  const [slideTitle, setSlideTitle] = useState('');
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { connectMQTT, disconnectMQTT, mqttClient } = useSwipeeStore();
 
   const isPresenting = searchParams.get('isPresenting') === 'true';
   const presentationId = searchParams.get('presentationId') || '';
   const slideId = searchParams.get('slideId') || '';
-
-  const { connectMQTT, disconnectMQTT, mqttClient } = useSwipeeStore();
 
   // Load game state from API
   useEffect(() => {
@@ -297,28 +296,30 @@ export default function PresentPage() {
         setIsLoading(true);
         setError(null);
 
-        const gameStore = await APIService.getGameStore<SwipeeConfigs>(presentationId, slideId);
+        const gameStore = await APIService.getGameStore<SwipeeConfigs>(
+          searchParams.get('presentationId') || '',
+          searchParams.get('slideId') || ''
+        );
 
         if (!gameStore) {
-          await APIService.initGame(presentationId, slideId, {});
-          setGameState({
-            isStarted: false,
-            questions: [],
-            currentQuestionIndex: -1,
-            timeSpent: 0
-          });
-        } else {
-          const latestState = gameStore.states[gameStore.states.length - 1];
-          const isStarted = latestState?.event_name === 'STARTED';
-          setGameState({
+          setError('Game not found. Please check your link.');
+          return;
+        }
+
+        // Check if game is running from the latest state
+        const latestState = gameStore.states[gameStore.states.length - 1];
+        const isStarted = latestState?.event_name === 'STARTED';
+        
+        // Store all questions and set current question if game is running
+        if (gameStore.configs && gameStore.configs.questions) {
+          const newGameState: SwipeeState = {
             isStarted,
-            questions: gameStore.configs?.questions || [],
-            currentQuestionIndex: -1,
+            questions: gameStore.configs.questions,
+            currentQuestionIndex: isStarted ? 0 : -1,
             timeSpent: isStarted ? Math.floor((Date.now() - latestState.timestamp) / 1000) : 0
-          });
-          if (isStarted) {
-            setTimeElapsed(Math.floor((Date.now() - latestState.timestamp) / 1000));
-          }
+          };
+          setGameState(newGameState);
+          setSlideTitle(gameStore.configs.title || '');
         }
 
         // Connect to MQTT if isPresenting
@@ -328,7 +329,7 @@ export default function PresentPage() {
           await handleStartGame();
         }
       } catch (err) {
-        console.error('Error loading game state:', err);
+        console.error('Game state loading error:', err);
         setError('Failed to load game state. Please try again.');
       } finally {
         setIsLoading(false);
@@ -340,7 +341,7 @@ export default function PresentPage() {
     return () => {
       disconnectMQTT();
     };
-  }, [presentationId, slideId, isPresenting, connectMQTT, disconnectMQTT]);
+  }, [searchParams, connectMQTT, disconnectMQTT]);
 
   // Subscribe to MQTT messages
   useEffect(() => {
@@ -350,11 +351,11 @@ export default function PresentPage() {
           setGameState(prev => ({ ...prev, isStarted: true }));
         } else if (message.type === 'GAME_STOP') {
           setGameState(prev => ({ ...prev, isStarted: false }));
-          router.push(`/swipee/${secret}/present?presentationId=${presentationId}&slideId=${slideId}`);
+          router.push(`/swipee/${params.secret}/present?presentationId=${presentationId}&slideId=${slideId}`);
         }
       });
     }
-  }, [mqttClient, isPresenting, secret, presentationId, slideId, router]);
+  }, [mqttClient, isPresenting, params.secret, presentationId, slideId, router]);
 
   const handleStartGame = async () => {
     try {
@@ -381,7 +382,6 @@ export default function PresentPage() {
         isStarted: true,
         timeSpent: 0
       }));
-      setTimeElapsed(0);
       setError(null);
     } catch (err) {
       console.error('Start game error:', err);
@@ -415,7 +415,7 @@ export default function PresentPage() {
       }));
 
       // Redirect to present page without isPresenting parameter
-      router.push(`/swipee/${secret}/present?presentationId=${presentationId}&slideId=${slideId}`);
+      router.push(`/swipee/${params.secret}/present?presentationId=${presentationId}&slideId=${slideId}`);
     } catch (err) {
       console.error('Stop game error:', err);
       setError('Failed to stop game');
@@ -430,6 +430,20 @@ export default function PresentPage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
+      {slideTitle && (
+        <Typography 
+          variant="h4" 
+          sx={{ 
+            textAlign: 'center',
+            mb: 4,
+            fontWeight: 700,
+            color: COLORS.darkGray
+          }}
+        >
+          {slideTitle}
+        </Typography>
+      )}
+      
       {isLoading ? (
         <Box sx={{ 
           py: 6, 
@@ -468,7 +482,7 @@ export default function PresentPage() {
           alignItems: 'center',
           gap: 4
         }}>
-          <PreviewLayout questions={gameState.questions} />
+          <PreviewLayout questions={gameState?.questions || []} />
         </Box>
       ) : (
         <Box sx={{ 
@@ -487,7 +501,7 @@ export default function PresentPage() {
             gap: 4,
             width: '100%',
           }}>
-            {gameState.isStarted ? (
+            {gameState?.isStarted ? (
               <>
                 <Box sx={{ 
                   position: 'relative',
@@ -517,7 +531,7 @@ export default function PresentPage() {
                         color: COLORS.darkGray,
                       }}
                     >
-                      {formatTime(timeElapsed)}
+                      {formatTime(gameState.timeSpent)}
                     </Typography>
                   </Box>
                   <Button
@@ -558,7 +572,7 @@ export default function PresentPage() {
 
           <Box sx={{ mt: 2 }}>
             <Typography variant="body1" align="center">
-              Game Status: {gameState.isStarted ? 'Running' : 'Stopped'}
+              Game Status: {gameState?.isStarted ? 'Running' : 'Stopped'}
             </Typography>
             <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1 }}>
               Share the audience link with your participants

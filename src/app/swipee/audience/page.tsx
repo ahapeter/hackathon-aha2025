@@ -65,6 +65,7 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
   const [score, setScore] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasAnswered, setHasAnswered] = useState(false);
+  const [slideTitle, setSlideTitle] = useState('');
   const cardRef = useRef<any>(null);
 
   const { connectMQTT, disconnectMQTT, mqttClient } = useSwipeeStore();
@@ -122,6 +123,7 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
           };
           console.log('Setting new game state:', newGameState);
           setGameState(newGameState);
+          setSlideTitle(gameStore.configs.title || '');
         }
 
         // Connect to MQTT
@@ -306,40 +308,29 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
 
   return (
     <Container maxWidth="sm" sx={{ py: 4, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {console.log('Rendering with currentQuestion:', currentQuestion)}
-      {console.log('Rendering with hasAnswered:', hasAnswered)}
-      {console.log('Rendering with gameState:', gameState)}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 1,
-        mb: 2,
-        flexWrap: 'wrap',
-        px: 2
-      }}>
-        {gameState?.questions.map((question, index) => (
-          <Box
-            key={question.id}
-            sx={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              transition: 'all 0.2s ease',
-              bgcolor: index === gameState.currentQuestionIndex 
-                ? 'primary.main'
-                : hasAnswered && question.option.isCorrect
-                  ? 'success.main'
-                  : index < gameState.currentQuestionIndex
-                    ? 'error.main'
-                    : 'grey.300',
-              transform: index === gameState.currentQuestionIndex ? 'scale(1.2)' : 'scale(1)',
-            }}
-          />
-        ))}
-      </Box>
-
-      {gameState?.currentQuestionIndex === -1 ? (
+      {slideTitle && (
+        <Typography 
+          variant="h5" 
+          sx={{ 
+            textAlign: 'center',
+            mb: 3,
+            fontWeight: 600,
+            color: COLORS.darkGray
+          }}
+        >
+          {slideTitle}
+        </Typography>
+      )}
+      
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+          <CircularProgress />
+        </Box>
+      ) : error ? (
+        <Box sx={{ textAlign: 'center', color: 'error.main' }}>
+          <Typography variant="h6">{error}</Typography>
+        </Box>
+      ) : !gameState?.isStarted ? (
         <Box sx={{ 
           textAlign: 'center', 
           mt: 4,
@@ -351,168 +342,74 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
           <Typography 
             variant="h4" 
             sx={{ 
-              color: COLORS.lightBlue,
               fontWeight: 700,
-              fontSize: { xs: '2rem', sm: '2.5rem' },
-            }} 
-            gutterBottom
+              textAlign: 'center',
+              mb: 3,
+            }}
           >
-            Game Complete! 🎉
+            Waiting for Game to Start
           </Typography>
-          
-          <Box>
-            <Typography 
-              variant="h5" 
-              sx={{ 
-                fontWeight: 600,
-                color: COLORS.darkGray,
-              }} 
-              gutterBottom
-            >
-              Your Score: {score} / {gameState.questions.length}
-            </Typography>
-          </Box>
-
-          <Box sx={{ 
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-            maxWidth: 600,
-            mx: 'auto',
-            width: '100%'
-          }}>
-            {gameState.questions.map((question, index) => {
-              const userAnswer = hasAnswered && question.option.isCorrect;
-              const shownOption = question.option;
-              const wasCorrect = userAnswer === shownOption.isCorrect;
-              
-              return (
-                <Paper
-                  key={question.id}
-                  sx={{
-                    p: 3,
-                    display: 'flex',
-                    alignItems: 'stretch',
-                    gap: 3,
-                    bgcolor: 'white',
-                    borderRadius: 4,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                    border: `2px solid ${wasCorrect ? COLORS.teal : COLORS.pink}`,
-                    overflow: 'hidden'
-                  }}
-                >
-                  <Box sx={{ 
-                    minWidth: 32, 
-                    height: 32, 
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: wasCorrect ? COLORS.teal : COLORS.pink,
-                    color: 'white',
-                    fontWeight: 'bold',
-                    mt: 1
-                  }}>
-                    {wasCorrect ? <Check /> : <Close />}
-                  </Box>
-                  
-                  <Box sx={{ 
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: { xs: 'column', sm: 'row' },
-                    gap: 3,
-                    alignItems: 'flex-start'
-                  }}>
-                    {shownOption.imageUrl && (
-                      <Box 
-                        sx={{ 
-                          width: { xs: '100%', sm: 160 },
-                          height: { xs: 200, sm: 160 },
-                          borderRadius: 3,
-                          overflow: 'hidden',
-                          flexShrink: 0,
-                          boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-                        }}
-                      >
-                        <img 
-                          src={shownOption.imageUrl} 
-                          alt={shownOption.title}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover'
-                          }}
-                        />
-                      </Box>
-                    )}
-                    
-                    <Box sx={{ flex: 1 }}>
-                      <Typography 
-                        variant="h6" 
-                        sx={{ 
-                          mb: 2,
-                          fontSize: '1.25rem',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {shownOption.title}
-                      </Typography>
-                      <Box sx={{ 
-                        display: 'flex', 
-                        flexWrap: 'wrap',
-                        alignItems: 'center',
-                        gap: 2
-                      }}>
-                        <Box sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                          bgcolor: 'rgba(0,0,0,0.05)',
-                          borderRadius: 3,
-                          px: 2,
-                          py: 1,
-                        }}>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            Your answer:
-                          </Typography>
-                          {userAnswer ? (
-                            <ThumbUp sx={{ fontSize: 18, color: COLORS.teal }} />
-                          ) : (
-                            <ThumbDown sx={{ fontSize: 18, color: COLORS.pink }} />
-                          )}
-                        </Box>
-                        <Box sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                          bgcolor: 'rgba(0,0,0,0.05)',
-                          borderRadius: 3,
-                          px: 2,
-                          py: 1,
-                        }}>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            Correct answer:
-                          </Typography>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              fontWeight: 600,
-                              color: shownOption.isCorrect ? COLORS.teal : COLORS.pink
-                            }}
-                          >
-                            {shownOption.isCorrect ? 'True' : 'False'}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-                  </Box>
-                </Paper>
-              );
-            })}
-          </Box>
+          <CircularProgress 
+            size={64} 
+            sx={{ 
+              color: COLORS.teal,
+              mb: 4,
+            }} 
+          />
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              textAlign: 'center',
+              color: COLORS.darkGray,
+              opacity: 0.7,
+            }}
+          >
+            The host will start the game soon. Get ready to swipe!
+          </Typography>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              mt: 2,
+              textAlign: 'center',
+              color: COLORS.darkGray,
+              opacity: 0.5,
+            }}
+          >
+            Playing as: {searchParams.audienceName} {searchParams.audienceEmoji}
+          </Typography>
         </Box>
       ) : (
         <>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 1,
+            mb: 2,
+            flexWrap: 'wrap',
+            px: 2
+          }}>
+            {gameState?.questions.map((question, index) => (
+              <Box
+                key={question.id}
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease',
+                  bgcolor: index === gameState.currentQuestionIndex 
+                    ? 'primary.main'
+                    : hasAnswered && question.option.isCorrect
+                      ? 'success.main'
+                      : index < gameState.currentQuestionIndex
+                        ? 'error.main'
+                        : 'grey.300',
+                  transform: index === gameState.currentQuestionIndex ? 'scale(1.2)' : 'scale(1)',
+                }}
+              />
+            ))}
+          </Box>
+
           <Box sx={cardContainerStyle}>
             {currentQuestion && !hasAnswered && (
               <Box sx={{ 
@@ -532,11 +429,10 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
                   <TinderCard
                     ref={cardRef}
                     onSwipe={(dir) => {
-                      console.log('Swiped:', dir);
                       handleSwipeAction(dir);
                     }}
                     onCardLeftScreen={(dir) => {
-                      console.log('Card left screen:', dir);
+                      // Handle card leaving screen
                     }}
                     preventSwipe={['up', 'down']}
                     swipeRequirementType="position"
