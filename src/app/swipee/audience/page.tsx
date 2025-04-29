@@ -1,16 +1,14 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useSwipeeStore } from '@/modules/swipee/store/swipeeStore';
 import { Box, Typography, Container, Paper, CircularProgress, Stack, IconButton, Button } from '@mui/material';
 import { useParams } from 'next/navigation';
-import { connectToGame, disconnectFromGame, onGameStateChange, offGameStateChange, MqttMessage } from '@/shared/services/mqttService';
+import { MQTTService } from '@/shared/services/mqtt';
+import { MQTTMessage } from '@/modules/swipee/core/types';
 import TinderCard from 'react-tinder-card';
 import { SwipeeQuestion, SwipeeState, SwipeeConfigs } from '@/modules/swipee/types';
 import { APIService } from '@/shared/services/apiService';
-import { handleSwipe, isCorrectAnswer, Direction } from '@/modules/swipee/core/swipeLogic';
-import { initializeScoreService, submitScore, SCORE_EVENT } from '@/modules/swipee/services/scoreService';
-import { eventBus } from '@/shared/utils/eventBus';
 import { ArrowForward, ArrowBack, ThumbUp, ThumbDown, ArrowUpward, ArrowDownward, Check, Close } from '@mui/icons-material';
 
 interface AudiencePageProps {
@@ -60,14 +58,16 @@ const buttonStyle = {
 export default function AudiencePage({ searchParams }: AudiencePageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [gameState, setGameState] = useState<SwipeeState>({
-    isStarted: false,
-    questions: [],
-    currentQuestionIndex: -1,
-    timeSpent: 0
-  });
-  const [answeredQuestions, setAnsweredQuestions] = useState<Record<string, boolean>>({});
-  const [currentOptionIndex, setCurrentOptionIndex] = useState(0);
+  const [gameState, setGameState] = useState<SwipeeState | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<SwipeeQuestion | null>(null);
+  const [isGameStarted, setIsGameStarted] = useState(false);
+  const [isGameEnded, setIsGameEnded] = useState(false);
+  const [score, setScore] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasAnswered, setHasAnswered] = useState(false);
+  const cardRef = useRef<any>(null);
+
+  const { connectMQTT, disconnectMQTT, mqttClient } = useSwipeeStore();
 
   // Load game state from API
   useEffect(() => {
@@ -101,20 +101,8 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
         }
 
         // Connect to MQTT
-        await connectToGame(searchParams.presentationId);
-        
-        // Subscribe to game state changes
-        onGameStateChange((message: MqttMessage) => {
-          if (message.type === 'GAME_STATE') {
-            setGameState(prev => ({
-              ...prev,
-              isStarted: message.data.isStarted,
-              currentQuestionIndex: message.data.isStarted ? 0 : -1,
-              timeSpent: message.data.isStarted ? 0 : prev.timeSpent
-            }));
-          }
-        });
-
+        const topic = `swipee/${searchParams.presentationId}`;
+        connectMQTT(topic);
       } catch (err) {
         setError('Failed to load game state. Please try again.');
         console.error('Game state loading error:', err);
@@ -126,52 +114,57 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
     loadGameState();
 
     return () => {
-      offGameStateChange(() => {});
-      disconnectFromGame();
+      disconnectMQTT();
     };
-  }, [searchParams.presentationId, searchParams.slideId]);
+  }, [searchParams.presentationId, searchParams.slideId, connectMQTT, disconnectMQTT]);
 
-  // Initialize score service
+  // Subscribe to MQTT messages
   useEffect(() => {
-    initializeScoreService();
-    return () => {
-      eventBus.off(SCORE_EVENT, () => {});
-    };
-  }, []);
-
-  useEffect(() => {
-    // Randomly select an option when current question changes
-    if (gameState.currentQuestionIndex >= 0) {
-      setCurrentOptionIndex(Math.floor(Math.random() * 2));
+    if (mqttClient) {
+      mqttClient.onMessage((message: MQTTMessage) => {
+        if (message.type === 'GAME_START') {
+          setGameState(prev => prev ? {
+            ...prev,
+            isStarted: true,
+            currentQuestionIndex: 0,
+            timeSpent: 0
+          } : null);
+        } else if (message.type === 'GAME_STOP') {
+          setGameState(prev => prev ? {
+            ...prev,
+            isStarted: false,
+            currentQuestionIndex: -1
+          } : null);
+        }
+      });
     }
-  }, [gameState.currentQuestionIndex]);
+  }, [mqttClient]);
 
-  const onSwipe = async (direction: Direction) => {
-    if (!gameState.isStarted || gameState.currentQuestionIndex === -1) return;
-    
-    const currentQuestion = gameState.questions[gameState.currentQuestionIndex];
-    console.log('currentQuestion', currentQuestion);
-    const isCorrect = isCorrectAnswer(currentQuestion, direction);
-    
-    // Get next question index using pure function
-    const nextIndex = handleSwipe(gameState.questions, gameState.currentQuestionIndex, direction);
-    console.log('nextIndex', nextIndex);
-    
-    setGameState(prev => ({
-      ...prev,
-      currentQuestionIndex: nextIndex
-    }));
+  const onSwipe = async (direction: string) => {
+    if (!currentQuestion || hasAnswered || isSubmitting) return;
 
-    // Submit score asynchronously via event bus
-    submitScore({
-      presentationId: searchParams.presentationId,
-      slideId: searchParams.slideId,
-      audienceId: searchParams.audienceId,
-      audienceName: searchParams.audienceName,
-      audienceEmoji: searchParams.audienceEmoji,
-      score: isCorrect ? 1 : 0,
-      timestamp: Date.now()
-    });
+    setIsSubmitting(true);
+    setHasAnswered(true);
+
+    try {
+      const isSwipedRight = direction === 'right';
+      const isCorrect = isSwipedRight === currentQuestion.option.isCorrect;
+
+      await useSwipeeStore.getState().submitAnswer(
+        searchParams.presentationId,
+        searchParams.slideId,
+        searchParams.audienceId,
+        searchParams.audienceName,
+        searchParams.audienceEmoji,
+        isCorrect
+      );
+
+      setScore((prev) => prev + (isCorrect ? 1 : 0));
+    } catch (error) {
+      console.error('Failed to submit answer:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const cardContainerStyle = useMemo(() => ({
@@ -182,29 +175,32 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
     margin: '0 auto',
   }), []);
 
-  const handleSwipeAction = (direction: Direction) => {
+  const handleSwipeAction = (direction: 'left' | 'right' | 'up' | 'down') => {
     if (direction === 'up' || direction === 'down') {
       // Mark as skipped
       if (currentQuestion) {
-        setAnsweredQuestions(prev => ({
-          ...prev,
-          [currentQuestion.id]: false
-        }));
+        setHasAnswered(true);
       }
     } else {
       onSwipe(direction);
       // Mark as answered
       if (currentQuestion) {
-        setAnsweredQuestions(prev => ({
-          ...prev,
-          [currentQuestion.id]: true
-        }));
+        setHasAnswered(true);
       }
     }
   };
 
-  const handleButtonSwipe = (direction: Direction) => {
+  const handleButtonSwipe = (direction: 'left' | 'right') => {
     handleSwipeAction(direction);
+  };
+
+  const handleGameStateChange = (newState: SwipeeState) => {
+    if (!newState) return;
+    
+    setGameState(newState);
+    setCurrentQuestion(newState.questions[newState.currentQuestionIndex]);
+    setIsGameStarted(newState.isStarted);
+    setIsGameEnded(newState.currentQuestionIndex === -1);
   };
 
   if (isLoading) {
@@ -231,7 +227,7 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
     );
   }
 
-  if (!gameState.isStarted) {
+  if (!gameState?.isStarted) {
     return (
       <Container maxWidth="sm" sx={{ 
         py: 6,
@@ -284,33 +280,8 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
     );
   }
 
-  const currentQuestion = gameState.questions[gameState.currentQuestionIndex];
-  const currentOption = currentQuestion?.options[currentOptionIndex];
-
   return (
-    <Container maxWidth="sm" sx={{ 
-      py: 3, 
-      display: 'flex', 
-      flexDirection: 'column', 
-      minHeight: '100vh',
-      color: COLORS.darkGray,
-    }}>
-      <Box sx={{ textAlign: 'center', mb: 3 }}>
-        {gameState.currentQuestionIndex === 0 && (
-          <Typography 
-            variant="h5" 
-            gutterBottom 
-            sx={{ 
-              fontWeight: 700,
-              fontSize: { xs: '1.5rem', sm: '1.75rem' },
-              mb: 2,
-            }}
-          >
-            Swipe right if you think it's correct, left if you think it's wrong
-          </Typography>
-        )}
-      </Box>
-
+    <Container maxWidth="sm" sx={{ py: 4, height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'center',
@@ -320,7 +291,7 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
         flexWrap: 'wrap',
         px: 2
       }}>
-        {gameState.questions.map((question, index) => (
+        {gameState?.questions.map((question, index) => (
           <Box
             key={question.id}
             sx={{
@@ -330,7 +301,7 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
               transition: 'all 0.2s ease',
               bgcolor: index === gameState.currentQuestionIndex 
                 ? 'primary.main'
-                : answeredQuestions[question.id]
+                : hasAnswered && question.option.isCorrect
                   ? 'success.main'
                   : index < gameState.currentQuestionIndex
                     ? 'error.main'
@@ -341,7 +312,7 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
         ))}
       </Box>
 
-      {gameState.currentQuestionIndex === -1 ? (
+      {gameState?.currentQuestionIndex === -1 ? (
         <Box sx={{ 
           textAlign: 'center', 
           mt: 4,
@@ -371,7 +342,7 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
               }} 
               gutterBottom
             >
-              Your Score: {Object.values(answeredQuestions).filter(Boolean).length} / {gameState.questions.length}
+              Your Score: {score} / {gameState.questions.length}
             </Typography>
           </Box>
 
@@ -384,8 +355,8 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
             width: '100%'
           }}>
             {gameState.questions.map((question, index) => {
-              const userAnswer = answeredQuestions[question.id];
-              const shownOption = question.options[0];
+              const userAnswer = hasAnswered && question.option.isCorrect;
+              const shownOption = question.option;
               const wasCorrect = userAnswer === shownOption.isCorrect;
               
               return (
@@ -516,52 +487,86 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
       ) : (
         <>
           <Box sx={cardContainerStyle}>
-            {currentQuestion && currentOption && (
-              <TinderCard
-                key={`${currentQuestion.id}-${currentOptionIndex}`}
-                onSwipe={handleSwipeAction}
-                preventSwipe={[]}
-                swipeRequirementType="position"
-                swipeThreshold={100}
-              >
-                <Paper
-                  elevation={4}
-                  sx={{
-                    ...cardStyle,
-                    backgroundImage: currentOption.imageUrl ? `url(${currentOption.imageUrl})` : 'none',
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    backgroundRepeat: 'no-repeat',
-                    borderRadius: 2,
-                    border: '1px solid #eee',
-                  }}
+            {currentQuestion && !hasAnswered && (
+              <Box sx={{ position: 'relative', width: '100%', height: '60vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <TinderCard
+                  ref={cardRef}
+                  onSwipe={onSwipe}
+                  preventSwipe={['up', 'down']}
+                  swipeRequirementType="position"
+                  swipeThreshold={100}
                 >
-                  {!currentOption.imageUrl && (
-                    <Box sx={{ p: 3, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Typography variant="h5" sx={{ textAlign: 'center' }}>
-                        {currentOption.title}
-                      </Typography>
-                    </Box>
-                  )}
-                  {currentOption.imageUrl && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        p: 2,
-                        background: 'rgba(0, 0, 0, 0.7)',
-                        color: 'white',
-                        borderBottomLeftRadius: 'inherit',
-                        borderBottomRightRadius: 'inherit',
-                      }}
-                    >
-                      <Typography variant="h6">{currentOption.title}</Typography>
-                    </Box>
-                  )}
-                </Paper>
-              </TinderCard>
+                  <Paper
+                    elevation={4}
+                    sx={{
+                      ...cardStyle,
+                      position: 'relative',
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {currentQuestion.option.imageUrl ? (
+                      <>
+                        <Box 
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <img
+                            src={currentQuestion.option.imageUrl}
+                            alt={currentQuestion.option.title}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              p: 2,
+                              background: 'rgba(0, 0, 0, 0.7)',
+                              color: 'white',
+                            }}
+                          >
+                            <Typography variant="h6">{currentQuestion.option.title}</Typography>
+                          </Box>
+                        </Box>
+                      </>
+                    ) : (
+                      <Box sx={{ 
+                        p: 3, 
+                        width: '100%', 
+                        height: '100%', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        bgcolor: 'background.paper'
+                      }}>
+                        <Typography 
+                          variant="h5" 
+                          sx={{ 
+                            textAlign: 'center',
+                            fontWeight: 500,
+                            color: 'text.primary'
+                          }}
+                        >
+                          {currentQuestion.option.title}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Paper>
+                </TinderCard>
+              </Box>
             )}
           </Box>
 
@@ -605,6 +610,17 @@ export default function AudiencePage({ searchParams }: AudiencePageProps) {
           </Box>
         </>
       )}
+      <Typography 
+        variant="body2" 
+        sx={{ 
+          mt: 2,
+          textAlign: 'center',
+          color: COLORS.darkGray,
+          opacity: 0.5,
+        }}
+      >
+        Playing as: {searchParams.audienceName} {searchParams.audienceEmoji}
+      </Typography>
     </Container>
   );
 } 

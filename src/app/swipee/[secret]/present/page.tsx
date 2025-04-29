@@ -428,171 +428,144 @@ export default function PresentPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (isLoading) {
-    return (
-      <Container maxWidth="sm" sx={{ 
-        py: 6, 
-        textAlign: 'center',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-      }}>
-        <CircularProgress size={48} sx={{ color: COLORS.teal }} />
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            mt: 3,
-            color: COLORS.darkGray,
-            fontWeight: 500,
-          }}
-        >
-          Loading game...
-        </Typography>
-      </Container>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container maxWidth="sm" sx={{ 
-        py: 6, 
-        textAlign: 'center',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-      }}>
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            color: COLORS.pink,
-            fontWeight: 600,
-            mb: 2,
-          }}
-        >
-          {error}
-        </Typography>
-        <Typography 
-          variant="body1" 
-          sx={{ 
-            color: COLORS.darkGray,
-            opacity: 0.7,
-          }}
-        >
-          Please check your connection and try again.
-        </Typography>
-      </Container>
-    );
-  }
-
-  if (!gameState.isStarted) {
-    return (
-      <Container maxWidth={false} disableGutters sx={{ height: '100vh' }}>
-        <PreviewLayout questions={gameState.questions} />
-      </Container>
-    );
-  }
-
   return (
-    <Container maxWidth="sm" sx={{ 
-      py: 6,
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      color: COLORS.darkGray,
-    }}>
-      <Typography 
-        variant="h3" 
-        sx={{ 
-          fontWeight: 700,
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      {isLoading ? (
+        <Box sx={{ 
+          py: 6, 
           textAlign: 'center',
-          mb: 6,
-          color: COLORS.darkGray,
-        }}
-      >
-        Swipee Game
-      </Typography>
-
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center',
-        width: '100%',
-      }}>
-        {gameState.isStarted ? (
-          <>
-            <Box sx={{ 
-              position: 'relative',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              mb: 4,
-            }}>
-              <CircularProgress 
-                size={200} 
-                thickness={2} 
-                sx={{ 
-                  color: COLORS.teal,
-                  position: 'absolute',
-                }}
-              />
-              <Typography 
-                variant="h2" 
-                sx={{ 
-                  fontWeight: 700,
-                  fontSize: { xs: '3rem', sm: '4rem' },
-                  color: COLORS.darkGray,
-                }}
-              >
-                {formatTime(timeElapsed)}
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              startIcon={<Stop />}
-              onClick={handleStopGame}
-              sx={{
-                ...buttonStyle,
-                bgcolor: COLORS.pink,
-                '&:hover': {
-                  ...buttonStyle['&:hover'],
-                  bgcolor: COLORS.pink,
-                }
-              }}
-            >
-              Stop Game
-            </Button>
-          </>
-        ) : (
-          <Button
-            variant="contained"
-            startIcon={<PlayArrow />}
-            onClick={handleStartGame}
-            size="large"
-            sx={{
-              ...buttonStyle,
-              bgcolor: COLORS.teal,
-              '&:hover': {
-                ...buttonStyle['&:hover'],
-                bgcolor: COLORS.teal,
-              }
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+        }}>
+          <CircularProgress size={48} sx={{ color: COLORS.teal }} />
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              mt: 3,
+              color: COLORS.darkGray,
+              fontWeight: 500,
             }}
           >
-            Start Game
-          </Button>
-        )}
-      </Box>
+            Loading game...
+          </Typography>
+        </Box>
+      ) : error ? (
+        <Box sx={{ py: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="error" gutterBottom>
+            {error}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Please check your connection and try again.
+          </Typography>
+        </Box>
+      ) : !isPresenting ? (
+        <Box sx={{ 
+          py: 6,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 4
+        }}>
+          <PreviewLayout questions={gameState.questions} />
+        </Box>
+      ) : (
+        <Box sx={{ 
+          py: 6,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 4,
+          minHeight: '100vh',
+          justifyContent: 'center'
+        }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center',
+            gap: 4,
+            width: '100%',
+          }}>
+            {gameState.isStarted ? (
+              <>
+                <Box sx={{ 
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 4
+                }}>
+                  <Box sx={{ position: 'relative' }}>
+                    <CircularProgress 
+                      size={200} 
+                      thickness={2} 
+                      sx={{ 
+                        color: COLORS.teal,
+                      }}
+                    />
+                    <Typography 
+                      variant="h2" 
+                      sx={{ 
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        fontWeight: 700,
+                        fontSize: { xs: '3rem', sm: '4rem' },
+                        color: COLORS.darkGray,
+                      }}
+                    >
+                      {formatTime(timeElapsed)}
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="contained"
+                    onClick={handleStopGame}
+                    sx={{
+                      ...buttonStyle,
+                      bgcolor: COLORS.pink,
+                      '&:hover': {
+                        ...buttonStyle['&:hover'],
+                        bgcolor: COLORS.pink,
+                      }
+                    }}
+                  >
+                    Stop Game
+                  </Button>
+                </Box>
+              </>
+            ) : (
+              <Button
+                variant="contained"
+                startIcon={<PlayArrow />}
+                onClick={handleStartGame}
+                size="large"
+                sx={{
+                  ...buttonStyle,
+                  bgcolor: COLORS.teal,
+                  '&:hover': {
+                    ...buttonStyle['&:hover'],
+                    bgcolor: COLORS.teal,
+                  }
+                }}
+              >
+                Start Game
+              </Button>
+            )}
+          </Box>
 
-      <Box sx={{ mt: 6 }}>
-        <Typography variant="body1" align="center">
-          Game Status: {gameState.isStarted ? 'Running' : 'Stopped'}
-        </Typography>
-        <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1 }}>
-          Share the audience link with your participants
-        </Typography>
-      </Box>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body1" align="center">
+              Game Status: {gameState.isStarted ? 'Running' : 'Stopped'}
+            </Typography>
+            <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1 }}>
+              Share the audience link with your participants
+            </Typography>
+          </Box>
+        </Box>
+      )}
     </Container>
   );
 } 

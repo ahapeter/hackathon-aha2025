@@ -20,7 +20,18 @@ import {
   Tooltip,
   alpha
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon, BrokenImage as BrokenImageIcon, ArrowUpward as ArrowUpIcon, ArrowDownward as ArrowDownIcon, Image as ImageIcon, CheckCircle as CheckCircleIcon, PhotoLibrary as PhotoLibraryIcon, Close as CloseIcon } from '@mui/icons-material';
+import { 
+  Add as AddIcon, 
+  Delete as DeleteIcon, 
+  BrokenImage as BrokenImageIcon, 
+  ArrowUpward as ArrowUpIcon, 
+  ArrowDownward as ArrowDownIcon, 
+  Image as ImageIcon, 
+  RadioButtonUnchecked,
+  RadioButtonChecked,
+  PhotoLibrary as PhotoLibraryIcon, 
+  Close as CloseIcon 
+} from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
 import { SwipeeQuestion, SwipeeOption } from '@/modules/swipee/types';
 
