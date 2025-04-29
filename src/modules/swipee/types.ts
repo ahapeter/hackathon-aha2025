@@ -6,7 +6,6 @@ export interface SwipeeOption {
 
 export interface SwipeeQuestion {
   id: string;
-  title: string;
   options: [SwipeeOption, SwipeeOption];
   correctOptionIndex: number;
 }

@@ -16,9 +16,11 @@ import {
   FormControlLabel,
   Divider,
   Paper,
-  Radio
+  Radio,
+  Tooltip,
+  alpha
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon, BrokenImage as BrokenImageIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon, BrokenImage as BrokenImageIcon, ArrowUpward as ArrowUpIcon, ArrowDownward as ArrowDownIcon, Image as ImageIcon, CheckCircle as CheckCircleIcon, RadioButtonUnchecked as UncheckedIcon, PhotoLibrary as PhotoLibraryIcon, Close as CloseIcon } from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
 import { SwipeeQuestion, SwipeeOption } from '@/modules/swipee/types';
 
@@ -143,48 +145,58 @@ const ImagePreview = ({ url, size = 120 }: ImagePreviewProps) => {
   );
 };
 
-// Add style constants to match present page
+// Update option styles
 const optionStyles = {
   container: {
-    p: 2,
-    borderRadius: 2,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1,
+    p: 1,
+    borderRadius: 1,
+    bgcolor: (theme: any) => alpha(theme.palette.background.paper, 0.7),
+    '&:hover': {
+      bgcolor: (theme: any) => alpha(theme.palette.background.paper, 0.9),
+    },
     transition: 'all 0.2s ease',
-    position: 'relative',
-    mb: 2,
   },
-  correctOption: {
-    bgcolor: '#4CAF5010', // Light green background
-    border: '2px solid #4CAF50', // Green border
-    '&::after': {
-      content: '""',
-      position: 'absolute',
-      top: 8,
-      right: 8,
-      width: 16,
-      height: 16,
-      borderRadius: '50%',
-      bgcolor: '#4CAF50', // Green circle indicator
+  correctButton: {
+    p: 0.5,
+    '&:hover': {
+      bgcolor: 'transparent',
     },
   },
-  incorrectOption: {
-    bgcolor: '#F4433610', // Light red background
-    border: '2px solid #F44336', // Red border
-    '&::after': {
-      content: '""',
-      position: 'absolute',
-      top: 8,
-      right: 8,
-      width: 16,
-      height: 16,
-      borderRadius: '50%',
-      bgcolor: '#F44336', // Red circle indicator
+  correctIcon: {
+    color: '#4CAF50',
+    fontSize: 24,
+  },
+  uncheckedIcon: {
+    color: 'text.secondary',
+    fontSize: 24,
+  },
+  textField: {
+    flex: 1,
+    '& .MuiOutlinedInput-root': {
+      bgcolor: 'background.paper',
     },
+  },
+  actionButton: {
+    p: 0.5,
+    color: 'text.secondary',
+    '&:hover': {
+      color: 'text.primary',
+    },
+  },
+  imageIcon: {
+    color: 'text.secondary',
+    opacity: 0.7,
+    width: 20,
+    height: 20,
   },
 };
 
 const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) => {
-  const [title, setTitle] = useState(question.title);
   const [options, setOptions] = useState(question.options);
+  const [editingImageUrl, setEditingImageUrl] = useState<{ index: number; url: string } | null>(null);
 
   const handleOptionChange = (index: number, field: keyof SwipeeOption, value: any) => {
     const newOptions = [...options] as [SwipeeOption, SwipeeOption];
@@ -200,63 +212,94 @@ const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) =
   };
 
   return (
-    <Paper sx={{ p: 3, mb: 3 }}>
-      <Box sx={{ mb: 2 }}>
-        <TextField
-          fullWidth
-          label="Question Title"
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            onUpdate({ ...question, title: e.target.value });
-          }}
-          sx={{ mb: 2 }}
-        />
-      </Box>
+    <Paper sx={{ p: 3, mb: 3, position: 'relative' }}>
+      <IconButton 
+        onClick={() => onDelete(question.id)} 
+        sx={{ 
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          color: 'text.secondary',
+          opacity: 0.7,
+          '&:hover': {
+            opacity: 1,
+            color: 'error.main',
+          },
+        }}
+      >
+        <CloseIcon sx={{ fontSize: 20 }} />
+      </IconButton>
 
-      {options.map((option, index) => (
-        <Box 
-          key={index} 
-          sx={{ 
-            ...optionStyles.container,
-            ...(option.isCorrect ? optionStyles.correctOption : optionStyles.incorrectOption),
-          }}
-        >
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {options.map((option, index) => (
+          <Box key={index} sx={optionStyles.container}>
+            <Tooltip title="Mark as correct answer" placement="top">
+              <IconButton
+                sx={optionStyles.correctButton}
+                onClick={() => handleOptionChange(index, 'isCorrect', true)}
+              >
+                {option.isCorrect ? (
+                  <CheckCircleIcon sx={optionStyles.correctIcon} />
+                ) : (
+                  <UncheckedIcon sx={optionStyles.uncheckedIcon} />
+                )}
+              </IconButton>
+            </Tooltip>
+
             <TextField
-              fullWidth
-              label={`Option ${index + 1} Title`}
+              sx={optionStyles.textField}
+              size="small"
               value={option.title}
               onChange={(e) => handleOptionChange(index, 'title', e.target.value)}
+              placeholder={`Option ${index + 1}`}
             />
-            <TextField
-              fullWidth
-              label={`Option ${index + 1} Image URL`}
-              value={option.imageUrl}
-              onChange={(e) => handleOptionChange(index, 'imageUrl', e.target.value)}
-            />
-            <FormControlLabel
-              control={
-                <Radio
-                  checked={option.isCorrect}
-                  onChange={() => handleOptionChange(index, 'isCorrect', true)}
-                  sx={{
-                    '&.Mui-checked': {
-                      color: option.isCorrect ? '#4CAF50' : '#F44336'
-                    }
-                  }}
-                />
-              }
-              label="Correct"
-            />
-          </Box>
-        </Box>
-      ))}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-        <IconButton onClick={() => onDelete(question.id)} color="error">
-          <DeleteIcon />
-        </IconButton>
+            <Box sx={{ position: 'relative' }}>
+              <Tooltip title={option.imageUrl ? "Edit image URL" : "Add image URL"} placement="top">
+                <IconButton 
+                  sx={optionStyles.actionButton}
+                  onClick={() => setEditingImageUrl({ index, url: option.imageUrl })}
+                >
+                  <PhotoLibraryIcon sx={optionStyles.imageIcon} />
+                </IconButton>
+              </Tooltip>
+              {editingImageUrl?.index === index && (
+                <Paper
+                  sx={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    mt: 1,
+                    p: 2,
+                    zIndex: 1,
+                    minWidth: 300,
+                    boxShadow: 4,
+                  }}
+                >
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Image URL"
+                    value={editingImageUrl.url}
+                    onChange={(e) => setEditingImageUrl({ index, url: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleOptionChange(index, 'imageUrl', editingImageUrl.url);
+                        setEditingImageUrl(null);
+                      } else if (e.key === 'Escape') {
+                        setEditingImageUrl(null);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    Press Enter to save, Escape to cancel
+                  </Typography>
+                </Paper>
+              )}
+            </Box>
+          </Box>
+        ))}
       </Box>
     </Paper>
   );
@@ -336,11 +379,11 @@ export default function EditPage({ searchParams }: EditPageProps) {
   const handleAddQuestion = () => {
     const newQuestion: SwipeeQuestion = {
       id: Date.now().toString(),
-      title: '',
       options: [
-        { title: '', imageUrl: '', isCorrect: true },  // First option defaults to correct
+        { title: '', imageUrl: '', isCorrect: true },
         { title: '', imageUrl: '', isCorrect: false }
-      ]
+      ],
+      correctOptionIndex: 0
     };
     setQuestions([...questions, newQuestion]);
   };
