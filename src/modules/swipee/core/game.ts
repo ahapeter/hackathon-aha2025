@@ -62,77 +62,82 @@ export class SwipeeGame {
 export const createDummyQuestions = (): SwipeeQuestion[] => [
   {
     id: '1',
-    options: [
-      {
-        title: 'Paris is the capital of France',
-        imageUrl: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34',
-        isCorrect: true,
-      },
-      {
-        title: 'London is the capital of France',
-        imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad',
-        isCorrect: false,
-      },
-    ],
+    option: {
+      title: 'Paris is the capital of France',
+      imageUrl: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34',
+      isCorrect: true,
+    }
   },
   {
     id: '2',
-    options: [
-      {
-        title: 'Mount Everest is the highest mountain',
-        imageUrl: 'https://images.unsplash.com/photo-1516911064819-3bae0f8ad7d3',
-        isCorrect: true,
-      },
-      {
-        title: 'K2 is the highest mountain',
-        imageUrl: 'https://images.unsplash.com/photo-1486911278844-a81c5267e227',
-        isCorrect: false,
-      },
-    ],
+    option: {
+      title: 'London is the capital of France',
+      imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad',
+      isCorrect: false,
+    }
   },
   {
     id: '3',
-    options: [
-      {
-        title: 'The Earth is round',
-        imageUrl: 'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4',
-        isCorrect: true,
-      },
-      {
-        title: 'The Earth is flat',
-        imageUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa',
-        isCorrect: false,
-      },
-    ],
+    option: {
+      title: 'Mount Everest is the highest mountain',
+      imageUrl: 'https://images.unsplash.com/photo-1516911064819-3bae0f8ad7d3',
+      isCorrect: true,
+    }
   },
   {
     id: '4',
-    options: [
-      {
-        title: 'Water freezes at 0°C',
-        imageUrl: 'https://images.unsplash.com/photo-1612968738155-87c12572b0d4',
-        isCorrect: true,
-      },
-      {
-        title: 'Water freezes at 10°C',
-        imageUrl: 'https://images.unsplash.com/photo-1580937851511-a8aa4e4fa3b9',
-        isCorrect: false,
-      },
-    ],
+    option: {
+      title: 'K2 is the highest mountain',
+      imageUrl: 'https://images.unsplash.com/photo-1486911278844-a81c5267e227',
+      isCorrect: false,
+    }
   },
   {
     id: '5',
-    options: [
-      {
-        title: 'The sun is a star',
-        imageUrl: 'https://images.unsplash.com/photo-1532693322450-2cb5c511067d',
-        isCorrect: true,
-      },
-      {
-        title: 'The sun is a planet',
-        imageUrl: 'https://images.unsplash.com/photo-1614642264762-d0a3b8bf3700',
-        isCorrect: false,
-      },
-    ],
+    option: {
+      title: 'The Earth is round',
+      imageUrl: 'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4',
+      isCorrect: true,
+    }
   },
+  {
+    id: '6',
+    option: {
+      title: 'The Earth is flat',
+      imageUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa',
+      isCorrect: false,
+    }
+  },
+  {
+    id: '7',
+    option: {
+      title: 'Water freezes at 0°C',
+      imageUrl: 'https://images.unsplash.com/photo-1612968738155-87c12572b0d4',
+      isCorrect: true,
+    }
+  },
+  {
+    id: '8',
+    option: {
+      title: 'Water freezes at 10°C',
+      imageUrl: 'https://images.unsplash.com/photo-1580937851511-a8aa4e4fa3b9',
+      isCorrect: false,
+    }
+  },
+  {
+    id: '9',
+    option: {
+      title: 'The sun is a star',
+      imageUrl: 'https://images.unsplash.com/photo-1532693322450-2cb5c511067d',
+      isCorrect: true,
+    }
+  },
+  {
+    id: '10',
+    option: {
+      title: 'The sun is a planet',
+      imageUrl: 'https://images.unsplash.com/photo-1614642264762-d0a3b8bf3700',
+      isCorrect: false,
+    }
+  }
 ]; 

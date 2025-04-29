@@ -192,23 +192,21 @@ const optionStyles = {
     width: 20,
     height: 20,
   },
+  optionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1,
+  },
 };
 
 const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) => {
-  const [options, setOptions] = useState(question.options);
-  const [editingImageUrl, setEditingImageUrl] = useState<{ index: number; url: string } | null>(null);
+  const [option, setOption] = useState(question.option);
+  const [editingImageUrl, setEditingImageUrl] = useState<{ url: string } | null>(null);
 
-  const handleOptionChange = (index: number, field: keyof SwipeeOption, value: any) => {
-    const newOptions = [...options] as [SwipeeOption, SwipeeOption];
-    if (field === 'isCorrect') {
-      // When setting an option as correct, make sure the other is incorrect
-      newOptions[0] = { ...newOptions[0], isCorrect: index === 0 };
-      newOptions[1] = { ...newOptions[1], isCorrect: index === 1 };
-    } else {
-      newOptions[index] = { ...newOptions[index], [field]: value };
-    }
-    setOptions(newOptions);
-    onUpdate({ ...question, options: newOptions });
+  const handleOptionChange = (field: keyof SwipeeOption, value: any) => {
+    const newOption = { ...option, [field]: value };
+    setOption(newOption);
+    onUpdate({ ...question, option: newOption });
   };
 
   return (
@@ -230,76 +228,74 @@ const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) =
         <CloseIcon sx={{ fontSize: 20 }} />
       </IconButton>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {options.map((option, index) => (
-          <Box key={index} sx={optionStyles.container}>
-            <Tooltip title="Mark as correct answer" placement="top">
-              <IconButton
-                sx={optionStyles.correctButton}
-                onClick={() => handleOptionChange(index, 'isCorrect', true)}
+      <Box sx={optionStyles.container}>
+        <Box sx={optionStyles.optionRow}>
+          <Tooltip title="Mark as correct answer" placement="top">
+            <IconButton
+              sx={optionStyles.correctButton}
+              onClick={() => handleOptionChange('isCorrect', !option.isCorrect)}
+            >
+              {option.isCorrect ? (
+                <CheckCircleIcon sx={optionStyles.correctIcon} />
+              ) : (
+                <UncheckedIcon sx={optionStyles.uncheckedIcon} />
+              )}
+            </IconButton>
+          </Tooltip>
+
+          <TextField
+            sx={optionStyles.textField}
+            size="small"
+            value={option.title}
+            onChange={(e) => handleOptionChange('title', e.target.value)}
+            placeholder="Enter option text"
+          />
+
+          <Box sx={{ position: 'relative' }}>
+            <Tooltip title={option.imageUrl ? "Edit image URL" : "Add image URL"} placement="top">
+              <IconButton 
+                sx={optionStyles.actionButton}
+                onClick={() => setEditingImageUrl({ url: option.imageUrl })}
               >
-                {option.isCorrect ? (
-                  <CheckCircleIcon sx={optionStyles.correctIcon} />
-                ) : (
-                  <UncheckedIcon sx={optionStyles.uncheckedIcon} />
-                )}
+                <PhotoLibraryIcon sx={optionStyles.imageIcon} />
               </IconButton>
             </Tooltip>
-
-            <TextField
-              sx={optionStyles.textField}
-              size="small"
-              value={option.title}
-              onChange={(e) => handleOptionChange(index, 'title', e.target.value)}
-              placeholder={`Option ${index + 1}`}
-            />
-
-            <Box sx={{ position: 'relative' }}>
-              <Tooltip title={option.imageUrl ? "Edit image URL" : "Add image URL"} placement="top">
-                <IconButton 
-                  sx={optionStyles.actionButton}
-                  onClick={() => setEditingImageUrl({ index, url: option.imageUrl })}
-                >
-                  <PhotoLibraryIcon sx={optionStyles.imageIcon} />
-                </IconButton>
-              </Tooltip>
-              {editingImageUrl?.index === index && (
-                <Paper
-                  sx={{
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    mt: 1,
-                    p: 2,
-                    zIndex: 1,
-                    minWidth: 300,
-                    boxShadow: 4,
+            {editingImageUrl && (
+              <Paper
+                sx={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  mt: 1,
+                  p: 2,
+                  zIndex: 1,
+                  minWidth: 300,
+                  boxShadow: 4,
+                }}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Image URL"
+                  value={editingImageUrl.url}
+                  onChange={(e) => setEditingImageUrl({ url: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleOptionChange('imageUrl', editingImageUrl.url);
+                      setEditingImageUrl(null);
+                    } else if (e.key === 'Escape') {
+                      setEditingImageUrl(null);
+                    }
                   }}
-                >
-                  <TextField
-                    fullWidth
-                    size="small"
-                    label="Image URL"
-                    value={editingImageUrl.url}
-                    onChange={(e) => setEditingImageUrl({ index, url: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleOptionChange(index, 'imageUrl', editingImageUrl.url);
-                        setEditingImageUrl(null);
-                      } else if (e.key === 'Escape') {
-                        setEditingImageUrl(null);
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                    Press Enter to save, Escape to cancel
-                  </Typography>
-                </Paper>
-              )}
-            </Box>
+                  autoFocus
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  Press Enter to save, Escape to cancel
+                </Typography>
+              </Paper>
+            )}
           </Box>
-        ))}
+        </Box>
       </Box>
     </Paper>
   );
@@ -379,11 +375,11 @@ export default function EditPage({ searchParams }: EditPageProps) {
   const handleAddQuestion = () => {
     const newQuestion: SwipeeQuestion = {
       id: Date.now().toString(),
-      options: [
-        { title: '', imageUrl: '', isCorrect: true },
-        { title: '', imageUrl: '', isCorrect: false }
-      ],
-      correctOptionIndex: 0
+      option: {
+        title: '',
+        imageUrl: '',
+        isCorrect: false
+      }
     };
     setQuestions([...questions, newQuestion]);
   };

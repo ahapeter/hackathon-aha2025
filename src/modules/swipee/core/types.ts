@@ -6,7 +6,7 @@ export interface SwipeeOption {
 
 export interface SwipeeQuestion {
   id: string;
-  options: [SwipeeOption, SwipeeOption];
+  option: SwipeeOption;
 }
 
 export interface SwipeeGameConfig {

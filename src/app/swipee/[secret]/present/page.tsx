@@ -8,6 +8,8 @@ import { APIService } from '@/shared/services/apiService';
 import { SwipeeConfigs, SwipeeState, SwipeeOption } from '@/modules/swipee/types';
 import { connectToGame, disconnectFromGame, sendGameState } from '@/shared/services/mqttService';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { alpha } from '@mui/material/styles';
+import { SwipeeQuestion } from '@/modules/swipee/types';
 
 interface PresentPageProps {
   params: {
@@ -18,6 +20,10 @@ interface PresentPageProps {
     slideId: string;
     isPresenting?: string;
   };
+}
+
+interface OptionWithQuestionId extends SwipeeOption {
+  questionId: string;
 }
 
 // Add style constants
@@ -152,6 +158,117 @@ const previewStyles = {
       bgcolor: '#F44336', // Red circle indicator
     },
   },
+};
+
+const optionStyles = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 1,
+    width: '100%',
+    height: '100%',
+  },
+  lane: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 1.5,
+    flex: 1,
+    minHeight: 0,
+    overflow: 'auto',
+    p: 1,
+  },
+  optionCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: 1.5,
+    borderRadius: 1,
+    border: '2px solid',
+    position: 'relative',
+    transition: 'all 0.2s ease',
+    '& img': {
+      width: '100%',
+      aspectRatio: '16/9',
+      objectFit: 'cover',
+      borderRadius: 1,
+      mb: 0.5,
+    },
+  },
+  optionText: {
+    textAlign: 'center',
+    fontSize: '0.9rem',
+    fontWeight: 500,
+    mt: 0.5,
+  },
+  correctOption: {
+    borderColor: '#4CAF50',
+    bgcolor: alpha('#4CAF50', 0.1),
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      width: 8,
+      height: 8,
+      borderRadius: '50%',
+      bgcolor: '#4CAF50',
+    },
+  },
+  incorrectOption: {
+    borderColor: '#FF4081',
+    bgcolor: alpha('#FF4081', 0.1),
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      width: 8,
+      height: 8,
+      borderRadius: '50%',
+      bgcolor: '#FF4081',
+    },
+  },
+};
+
+const PreviewLayout = ({ questions }: { questions: SwipeeQuestion[] }) => {
+  // Distribute questions across lanes
+  const lanes: SwipeeQuestion[][] = [[], [], []];
+  
+  questions.forEach((question, index) => {
+    const laneIndex = index % 3; // Use modulo to distribute across all lanes
+    lanes[laneIndex].push(question);
+  });
+
+  return (
+    <Box sx={{ 
+      display: 'flex', 
+      gap: 1, 
+      height: '100vh', 
+      p: 1,
+      bgcolor: '#f5f5f5',
+    }}>
+      {lanes.map((laneQuestions, laneIndex) => (
+        <Box key={laneIndex} sx={optionStyles.lane}>
+          {laneQuestions.map((question) => (
+            <Box
+              key={question.id}
+              sx={{
+                ...optionStyles.optionCard,
+                ...(question.option.isCorrect ? optionStyles.correctOption : optionStyles.incorrectOption),
+              }}
+            >
+              {question.option.imageUrl && (
+                <img src={question.option.imageUrl} alt={question.option.title} />
+              )}
+              <Typography sx={optionStyles.optionText}>
+                {question.option.title}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      ))}
+    </Box>
+  );
 };
 
 export default function PresentPage() {
@@ -381,166 +498,8 @@ export default function PresentPage() {
 
   if (!gameState.isStarted) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        {!isPresenting && (
-          <Box sx={previewStyles.container}>
-            <Box sx={previewStyles.questionsContainer}>
-              {gameState.questions.map((question) => {
-                // Initialize 3 empty lanes
-                const lanes: Array<SwipeeOption[]> = [[], [], []];
-                
-                // Distribute options using round-robin
-                question.options.forEach((option, index) => {
-                  const laneIndex = index % 3;
-                  lanes[laneIndex].push(option);
-                });
-
-                return (
-                  <Box key={question.id} sx={previewStyles.questionContainer}>
-                    <Box sx={previewStyles.lanesContainer}>
-                      {lanes.map((laneOptions, laneIndex) => (
-                        <Box key={laneIndex} sx={previewStyles.lane}>
-                          {laneOptions.map((option, optionIndex) => {
-                            return (
-                              <Box
-                                key={optionIndex}
-                                sx={{
-                                  ...previewStyles.option,
-                                  ...(option.isCorrect 
-                                    ? previewStyles.correctOption 
-                                    : previewStyles.incorrectOption),
-                                  position: 'relative',
-                                }}
-                              >
-                                {option.imageUrl ? (
-                                  <Box
-                                    component="img"
-                                    src={option.imageUrl}
-                                    alt={`Option ${optionIndex + 1}`}
-                                    sx={previewStyles.optionImage}
-                                    onError={(e) => {
-                                      const target = e.target as HTMLImageElement;
-                                      target.src = '/placeholder-image.png';
-                                    }}
-                                  />
-                                ) : (
-                                  <Box sx={{ 
-                                    ...previewStyles.optionImage,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    bgcolor: 'grey.100',
-                                  }}>
-                                    <Typography variant="body2" color="text.secondary">
-                                      No Image
-                                    </Typography>
-                                  </Box>
-                                )}
-                                <Typography sx={previewStyles.optionTitle}>
-                                  {option.title}
-                                </Typography>
-                              </Box>
-                            );
-                          })}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-          </Box>
-        )}
-        {isPresenting && (
-          <Container maxWidth="sm" sx={{ 
-            py: 6,
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            color: COLORS.darkGray,
-          }}>
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                fontWeight: 700,
-                textAlign: 'center',
-                mb: 6,
-              }}
-            >
-              Game Results
-            </Typography>
-
-            <Box sx={{ width: '100%' }}>
-              {gameState.questions.map((question, index) => (
-                <Paper
-                  key={question.id}
-                  sx={{
-                    p: 3,
-                    mb: 3,
-                    bgcolor: 'white',
-                    borderRadius: 4,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                  }}
-                >
-                  <Typography 
-                    variant="h6" 
-                    sx={{ 
-                      mb: 2,
-                      fontWeight: 600,
-                    }}
-                  >
-                    Question {index + 1}: {question.title}
-                  </Typography>
-
-                  <Box sx={{ 
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                  }}>
-                    {question.options.map((option, optionIndex) => (
-                      <Box
-                        key={optionIndex}
-                        sx={{
-                          p: 2,
-                          borderRadius: 2,
-                          bgcolor: optionIndex === question.correctOptionIndex ? `${COLORS.teal}10` : 'grey.50',
-                          border: optionIndex === question.correctOptionIndex ? `2px solid ${COLORS.teal}` : 'none',
-                        }}
-                      >
-                        <Typography variant="body1" sx={{ mb: 1 }}>
-                          {option.title}
-                        </Typography>
-                        {option.imageUrl && (
-                          <Typography variant="body2" color="text.secondary">
-                            Image URL: {option.imageUrl}
-                          </Typography>
-                        )}
-                      </Box>
-                    ))}
-                  </Box>
-                </Paper>
-              ))}
-            </Box>
-
-            <Button
-              variant="contained"
-              startIcon={<PlayArrow />}
-              onClick={handleStartGame}
-              size="large"
-              sx={{
-                ...buttonStyle,
-                bgcolor: COLORS.teal,
-                '&:hover': {
-                  ...buttonStyle['&:hover'],
-                  bgcolor: COLORS.teal,
-                }
-              }}
-            >
-              Start Game
-            </Button>
-          </Container>
-        )}
+      <Container maxWidth={false} disableGutters sx={{ height: '100vh' }}>
+        <PreviewLayout questions={gameState.questions} />
       </Container>
     );
   }
