@@ -45,7 +45,6 @@ const buttonStyle = {
 export default function PresentPage() {
   const { secret } = useParams();
   const searchParams = useSearchParams();
-  const { connectMQTT, disconnectMQTT } = useSwipeeStore();
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,31 +130,75 @@ export default function PresentPage() {
 
   const handleStartGame = async () => {
     try {
-      await sendGameState(secret as string, true);
+      const presentationId = searchParams.get('presentationId');
+      const slideId = searchParams.get('slideId');
+      
+      if (!presentationId || !slideId) {
+        throw new Error('Missing presentationId or slideId');
+      }
+
+      // 1. Send game state via MQTT
+      await sendGameState(presentationId, true);
+
+      // 2. Set current store state
       setGameState(prev => ({
         ...prev,
         isStarted: true,
         timeSpent: 0
       }));
       setTimeElapsed(0);
+
+      // 3. Persist game state to store
+      await APIService.updateGameState(
+        presentationId,
+        slideId,
+        'event',
+        {
+          event_name: 'STARTED',
+          timestamp: Date.now()
+        }
+      );
+
       setError(null);
     } catch (err) {
-      setError('Failed to start game');
       console.error('Start game error:', err);
+      setError('Failed to start game');
     }
   };
 
   const handleStopGame = async () => {
     try {
-      await sendGameState(secret as string, false);
+      const presentationId = searchParams.get('presentationId');
+      const slideId = searchParams.get('slideId');
+      
+      if (!presentationId || !slideId) {
+        throw new Error('Missing presentationId or slideId');
+      }
+
+      // 1. Send game state via MQTT
+      await sendGameState(presentationId, false);
+
+      // 2. Set current store state
       setGameState(prev => ({
         ...prev,
         isStarted: false
       }));
+
+      // 3. Persist game state to store
+      await APIService.updateGameState(
+        presentationId,
+        slideId,
+        'event',
+        {
+          event_name: 'STOPPED',
+          timestamp: Date.now()
+        }
+      );
+
       setError(null);
     } catch (err) {
-      setError('Failed to stop game');
       console.error('Stop game error:', err);
+      setError('Failed to stop game');
     }
   };
 
