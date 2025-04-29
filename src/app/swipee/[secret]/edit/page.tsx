@@ -20,7 +20,7 @@ import {
   Tooltip,
   alpha
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon, BrokenImage as BrokenImageIcon, ArrowUpward as ArrowUpIcon, ArrowDownward as ArrowDownIcon, Image as ImageIcon, CheckCircle as CheckCircleIcon, RadioButtonUnchecked as UncheckedIcon, PhotoLibrary as PhotoLibraryIcon, Close as CloseIcon } from '@mui/icons-material';
+import { Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon, BrokenImage as BrokenImageIcon, ArrowUpward as ArrowUpIcon, ArrowDownward as ArrowDownIcon, Image as ImageIcon, CheckCircle as CheckCircleIcon, PhotoLibrary as PhotoLibraryIcon, Close as CloseIcon } from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
 import { SwipeeQuestion, SwipeeOption } from '@/modules/swipee/types';
 
@@ -145,59 +145,78 @@ const ImagePreview = ({ url, size = 120 }: ImagePreviewProps) => {
   );
 };
 
-// Update option styles
-const optionStyles = {
-  container: {
+const optionContainerStyle = (theme: any) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  padding: 2,
+  borderRadius: 1,
+  backgroundColor: theme.palette.background.paper,
+  '& .option-row': {
     display: 'flex',
     alignItems: 'center',
     gap: 1,
-    p: 1,
-    borderRadius: 1,
-    bgcolor: (theme: any) => alpha(theme.palette.background.paper, 0.7),
-    '&:hover': {
-      bgcolor: (theme: any) => alpha(theme.palette.background.paper, 0.9),
-    },
-    transition: 'all 0.2s ease',
+    width: '100%',
   },
-  correctButton: {
-    p: 0.5,
-    '&:hover': {
-      bgcolor: 'transparent',
-    },
-  },
-  correctIcon: {
-    color: '#4CAF50',
-    fontSize: 24,
-  },
-  uncheckedIcon: {
-    color: 'text.secondary',
-    fontSize: 24,
-  },
-  textField: {
+  '& .option-content': {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1,
     flex: 1,
-    '& .MuiOutlinedInput-root': {
-      bgcolor: 'background.paper',
-    },
   },
-  actionButton: {
-    p: 0.5,
-    color: 'text.secondary',
-    '&:hover': {
-      color: 'text.primary',
-    },
-  },
-  imageIcon: {
-    color: 'text.secondary',
-    opacity: 0.7,
-    width: 20,
-    height: 20,
-  },
-  optionRow: {
+  '& .option-actions': {
     display: 'flex',
     alignItems: 'center',
     gap: 1,
   },
-};
+  '& .MuiSwitch-root': {
+    width: 36,
+    height: 20,
+    padding: 0,
+    marginRight: 1,
+    '& .MuiSwitch-switchBase': {
+      padding: 0,
+      margin: 2,
+      transitionDuration: '300ms',
+      transform: 'translateX(16px)',
+      '&.Mui-checked': {
+        transform: 'translateX(0)',
+        '& + .MuiSwitch-track': {
+          backgroundColor: '#4CAF50',
+          opacity: 1,
+          border: 0,
+        },
+      },
+      '& + .MuiSwitch-track': {
+        backgroundColor: '#FF4081',
+        opacity: 1,
+        border: 0,
+      },
+    },
+    '& .MuiSwitch-thumb': {
+      boxSizing: 'border-box',
+      width: 16,
+      height: 16,
+      borderRadius: '50%',
+      backgroundColor: '#fff',
+    },
+    '& .MuiSwitch-track': {
+      borderRadius: 20,
+      opacity: 1,
+      transition: theme.transitions.create(['background-color'], {
+        duration: 500,
+      }),
+    },
+  },
+});
+
+const optionStyle = (isCorrect: boolean) => ({
+  flex: 1,
+  '& .MuiInputBase-root': {
+    backgroundColor: isCorrect ? '#e8f5e9' : '#ffebee',
+    transition: 'background-color 0.3s ease',
+  },
+});
 
 const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) => {
   const [option, setOption] = useState(question.option);
@@ -210,93 +229,76 @@ const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) =
   };
 
   return (
-    <Paper sx={{ p: 3, mb: 3, position: 'relative' }}>
-      <IconButton 
-        onClick={() => onDelete(question.id)} 
-        sx={{ 
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          color: 'text.secondary',
-          opacity: 0.7,
-          '&:hover': {
-            opacity: 1,
-            color: 'error.main',
-          },
-        }}
-      >
-        <CloseIcon sx={{ fontSize: 20 }} />
-      </IconButton>
-
-      <Box sx={optionStyles.container}>
-        <Box sx={optionStyles.optionRow}>
-          <Tooltip title="Mark as correct answer" placement="top">
-            <IconButton
-              sx={optionStyles.correctButton}
-              onClick={() => handleOptionChange('isCorrect', !option.isCorrect)}
-            >
-              {option.isCorrect ? (
-                <CheckCircleIcon sx={optionStyles.correctIcon} />
-              ) : (
-                <UncheckedIcon sx={optionStyles.uncheckedIcon} />
-              )}
-            </IconButton>
-          </Tooltip>
-
+    <Paper sx={optionContainerStyle}>
+      <Box className="option-row">
+        <Box className="option-content">
+          <Switch
+            checked={option.isCorrect}
+            onChange={(e) => handleOptionChange('isCorrect', e.target.checked)}
+            inputProps={{ 'aria-label': 'correct answer toggle' }}
+          />
           <TextField
-            sx={optionStyles.textField}
+            fullWidth
+            variant="outlined"
             size="small"
             value={option.title}
             onChange={(e) => handleOptionChange('title', e.target.value)}
-            placeholder="Enter option text"
+            sx={optionStyle(option.isCorrect)}
           />
-
-          <Box sx={{ position: 'relative' }}>
-            <Tooltip title={option.imageUrl ? "Edit image URL" : "Add image URL"} placement="top">
-              <IconButton 
-                sx={optionStyles.actionButton}
-                onClick={() => setEditingImageUrl({ url: option.imageUrl })}
-              >
-                <PhotoLibraryIcon sx={optionStyles.imageIcon} />
-              </IconButton>
-            </Tooltip>
-            {editingImageUrl && (
-              <Paper
-                sx={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  mt: 1,
-                  p: 2,
-                  zIndex: 1,
-                  minWidth: 300,
-                  boxShadow: 4,
-                }}
-              >
-                <TextField
-                  fullWidth
-                  size="small"
-                  label="Image URL"
-                  value={editingImageUrl.url}
-                  onChange={(e) => setEditingImageUrl({ url: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleOptionChange('imageUrl', editingImageUrl.url);
-                      setEditingImageUrl(null);
-                    } else if (e.key === 'Escape') {
-                      setEditingImageUrl(null);
-                    }
-                  }}
-                  autoFocus
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                  Press Enter to save, Escape to cancel
-                </Typography>
-              </Paper>
-            )}
-          </Box>
+        </Box>
+        <Box className="option-actions">
+          <Tooltip title="Edit Image URL">
+            <IconButton
+              size="small"
+              onClick={() => setEditingImageUrl({ url: option.imageUrl })}
+              sx={{ color: 'grey.500' }}
+            >
+              {option.imageUrl ? <PhotoLibraryIcon /> : <BrokenImageIcon />}
+            </IconButton>
+          </Tooltip>
+          <IconButton
+            size="small"
+            onClick={() => onDelete(question.id)}
+            sx={{ color: 'grey.500' }}
+          >
+            <DeleteIcon />
+          </IconButton>
         </Box>
       </Box>
+      {editingImageUrl && (
+        <Paper
+          sx={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            mt: 1,
+            p: 2,
+            zIndex: 1,
+            minWidth: 300,
+            boxShadow: 4,
+          }}
+        >
+          <TextField
+            fullWidth
+            size="small"
+            label="Image URL"
+            value={editingImageUrl.url}
+            onChange={(e) => setEditingImageUrl({ url: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleOptionChange('imageUrl', editingImageUrl.url);
+                setEditingImageUrl(null);
+              } else if (e.key === 'Escape') {
+                setEditingImageUrl(null);
+              }
+            }}
+            autoFocus
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Press Enter to save, Escape to cancel
+          </Typography>
+        </Paper>
+      )}
     </Paper>
   );
 };

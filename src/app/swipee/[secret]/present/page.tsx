@@ -6,7 +6,6 @@ import { Box, Button, Typography, Container, CircularProgress, Paper } from '@mu
 import { PlayArrow, Stop } from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
 import { SwipeeConfigs, SwipeeState, SwipeeOption } from '@/modules/swipee/types';
-import { connectToGame, disconnectFromGame, sendGameState } from '@/shared/services/mqttService';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { alpha } from '@mui/material/styles';
 import { SwipeeQuestion } from '@/modules/swipee/types';
@@ -286,6 +285,10 @@ export default function PresentPage() {
   });
 
   const isPresenting = searchParams.get('isPresenting') === 'true';
+  const presentationId = searchParams.get('presentationId') || '';
+  const slideId = searchParams.get('slideId') || '';
+
+  const { connectMQTT, disconnectMQTT, mqttClient } = useSwipeeStore();
 
   // Load game state from API
   useEffect(() => {
@@ -294,17 +297,10 @@ export default function PresentPage() {
         setIsLoading(true);
         setError(null);
 
-        const gameStore = await APIService.getGameStore<SwipeeConfigs>(
-          searchParams.get('presentationId') || '',
-          searchParams.get('slideId') || ''
-        );
+        const gameStore = await APIService.getGameStore<SwipeeConfigs>(presentationId, slideId);
 
         if (!gameStore) {
-          await APIService.initGame(
-            searchParams.get('presentationId') || '', 
-            searchParams.get('slideId') || '', 
-            {}
-          );
+          await APIService.initGame(presentationId, slideId, {});
           setGameState({
             isStarted: false,
             questions: [],
@@ -325,8 +321,10 @@ export default function PresentPage() {
           }
         }
 
-        // If isPresenting is true, start the game automatically
+        // Connect to MQTT if isPresenting
         if (isPresenting) {
+          const topic = `swipee/${presentationId}`;
+          connectMQTT(topic);
           await handleStartGame();
         }
       } catch (err) {
@@ -340,54 +338,50 @@ export default function PresentPage() {
     loadGameState();
 
     return () => {
-      disconnectFromGame();
+      disconnectMQTT();
     };
-  }, [searchParams, isPresenting]);
+  }, [presentationId, slideId, isPresenting, connectMQTT, disconnectMQTT]);
 
-  // Timer effect
+  // Subscribe to MQTT messages
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (gameState.isStarted) {
-      timer = setInterval(() => {
-        setTimeElapsed(prev => prev + 1);
-      }, 1000);
+    if (mqttClient && isPresenting) {
+      mqttClient.onMessage((message) => {
+        if (message.type === 'GAME_START') {
+          setGameState(prev => ({ ...prev, isStarted: true }));
+        } else if (message.type === 'GAME_STOP') {
+          setGameState(prev => ({ ...prev, isStarted: false }));
+          router.push(`/swipee/${secret}/present?presentationId=${presentationId}&slideId=${slideId}`);
+        }
+      });
     }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [gameState.isStarted]);
+  }, [mqttClient, isPresenting, secret, presentationId, slideId, router]);
 
   const handleStartGame = async () => {
     try {
-      const presentationId = searchParams.get('presentationId');
-      const slideId = searchParams.get('slideId');
-      
       if (!presentationId || !slideId) {
         throw new Error('Missing presentationId or slideId');
       }
 
-      // 1. Send game state via MQTT
-      await sendGameState(presentationId, true);
+      // Update game state in store
+      await APIService.updateGameState(presentationId, slideId, 'event', {
+        event_name: 'STARTED',
+        timestamp: Date.now()
+      });
 
-      // 2. Set current store state
+      // Publish MQTT message
+      if (mqttClient) {
+        mqttClient.publish(`swipee/${presentationId}`, {
+          type: 'GAME_START',
+          payload: null
+        });
+      }
+
       setGameState(prev => ({
         ...prev,
         isStarted: true,
         timeSpent: 0
       }));
       setTimeElapsed(0);
-
-      // 3. Persist game state to store
-      await APIService.updateGameState(
-        presentationId,
-        slideId,
-        'event',
-        {
-          event_name: 'STARTED',
-          timestamp: Date.now()
-        }
-      );
-
       setError(null);
     } catch (err) {
       console.error('Start game error:', err);
@@ -397,32 +391,28 @@ export default function PresentPage() {
 
   const handleStopGame = async () => {
     try {
-      const presentationId = searchParams.get('presentationId');
-      const slideId = searchParams.get('slideId');
-      
       if (!presentationId || !slideId) {
         throw new Error('Missing presentationId or slideId');
       }
 
-      // 1. Send game state via MQTT
-      await sendGameState(presentationId, false);
+      // Update game state in store
+      await APIService.updateGameState(presentationId, slideId, 'event', {
+        event_name: 'STOPPED',
+        timestamp: Date.now()
+      });
 
-      // 2. Set current store state
+      // Publish MQTT message
+      if (mqttClient) {
+        mqttClient.publish(`swipee/${presentationId}`, {
+          type: 'GAME_STOP',
+          payload: null
+        });
+      }
+
       setGameState(prev => ({
         ...prev,
         isStarted: false
       }));
-
-      // 3. Persist game state to store
-      await APIService.updateGameState(
-        presentationId,
-        slideId,
-        'event',
-        {
-          event_name: 'STOPPED',
-          timestamp: Date.now()
-        }
-      );
 
       // Redirect to present page without isPresenting parameter
       router.push(`/swipee/${secret}/present?presentationId=${presentationId}&slideId=${slideId}`);
