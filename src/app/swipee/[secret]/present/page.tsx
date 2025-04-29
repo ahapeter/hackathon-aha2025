@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useSwipeeStore } from '@/modules/swipee/store/swipeeStore';
-import { Box, Button, Typography, Container, CircularProgress } from '@mui/material';
+import { Box, Button, Typography, Container, CircularProgress, Paper } from '@mui/material';
 import { PlayArrow, Stop } from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
-import { SwipeeConfigs, SwipeeState } from '@/modules/swipee/types';
+import { SwipeeConfigs, SwipeeState, SwipeeOption } from '@/modules/swipee/types';
 import { connectToGame, disconnectFromGame, sendGameState } from '@/shared/services/mqttService';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 
 interface PresentPageProps {
   params: {
@@ -16,6 +16,7 @@ interface PresentPageProps {
   searchParams: {
     presentationId: string;
     slideId: string;
+    isPresenting?: string;
   };
 }
 
@@ -42,9 +43,121 @@ const buttonStyle = {
   transition: 'all 0.2s ease',
 };
 
+// Update preview styles
+const previewStyles = {
+  container: {
+    width: '100%',
+    aspectRatio: '16/9',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    position: 'relative',
+    overflow: 'hidden',
+    bgcolor: 'background.paper',
+    borderRadius: 2,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+  },
+  questionsContainer: {
+    width: '100%',
+    height: '100%',
+    overflowY: 'auto' as const,
+    '&::-webkit-scrollbar': {
+      width: '8px',
+    },
+    '&::-webkit-scrollbar-track': {
+      background: 'grey.100',
+      borderRadius: '4px',
+    },
+    '&::-webkit-scrollbar-thumb': {
+      background: 'grey.400',
+      borderRadius: '4px',
+      '&:hover': {
+        background: 'grey.500',
+      },
+    },
+  },
+  questionContainer: {
+    width: '100%',
+    minHeight: '100%',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 2,
+    p: 2,
+  },
+  lanesContainer: {
+    display: 'flex',
+    height: '100%',
+    gap: 2,
+  },
+  lane: {
+    width: '33.33%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 2,
+    p: 2,
+    position: 'relative' as const,
+    '&:not(:last-child)': {
+      borderRight: '1px solid',
+      borderColor: 'divider',
+    },
+  },
+  option: {
+    width: '100%',
+    aspectRatio: '16/9',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: 1,
+    p: 2,
+    borderRadius: 2,
+    transition: 'all 0.2s ease',
+  },
+  optionImage: {
+    width: '100%',
+    aspectRatio: '16/9',
+    objectFit: 'cover' as const,
+    borderRadius: 1,
+    bgcolor: 'grey.100',
+  },
+  optionTitle: {
+    textAlign: 'center' as const,
+    fontWeight: 500,
+    fontSize: '0.875rem',
+  },
+  correctOption: {
+    bgcolor: '#4CAF5010', // Light green background
+    border: '2px solid #4CAF50', // Green border
+    '&::after': {
+      content: '""',
+      position: 'absolute' as const,
+      top: 8,
+      right: 8,
+      width: 16,
+      height: 16,
+      borderRadius: '50%',
+      bgcolor: '#4CAF50', // Green circle indicator
+    },
+  },
+  incorrectOption: {
+    bgcolor: '#F4433610', // Light red background
+    border: '2px solid #F44336', // Red border
+    '&::after': {
+      content: '""',
+      position: 'absolute' as const,
+      top: 8,
+      right: 8,
+      width: 16,
+      height: 16,
+      borderRadius: '50%',
+      bgcolor: '#F44336', // Red circle indicator
+    },
+  },
+};
+
 export default function PresentPage() {
   const { secret } = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +168,9 @@ export default function PresentPage() {
     timeSpent: 0
   });
 
-  // Load game state from API and setup MQTT
+  const isPresenting = searchParams.get('isPresenting') === 'true';
+
+  // Load game state from API
   useEffect(() => {
     const loadGameState = async () => {
       try {
@@ -93,13 +208,10 @@ export default function PresentPage() {
           }
         }
 
-        // Connect to MQTT after loading game state
-        const presentationId = searchParams.get('presentationId');
-        if (presentationId) {
-          console.log('Connecting to MQTT with presentationId:', presentationId);
-          await connectToGame(presentationId);
+        // If isPresenting is true, start the game automatically
+        if (isPresenting) {
+          await handleStartGame();
         }
-
       } catch (err) {
         console.error('Error loading game state:', err);
         setError('Failed to load game state. Please try again.');
@@ -113,7 +225,7 @@ export default function PresentPage() {
     return () => {
       disconnectFromGame();
     };
-  }, [searchParams]);
+  }, [searchParams, isPresenting]);
 
   // Timer effect
   useEffect(() => {
@@ -195,7 +307,8 @@ export default function PresentPage() {
         }
       );
 
-      setError(null);
+      // Redirect to present page without isPresenting parameter
+      router.push(`/swipee/${secret}/present?presentationId=${presentationId}&slideId=${slideId}`);
     } catch (err) {
       console.error('Stop game error:', err);
       setError('Failed to stop game');
@@ -262,6 +375,172 @@ export default function PresentPage() {
         >
           Please check your connection and try again.
         </Typography>
+      </Container>
+    );
+  }
+
+  if (!gameState.isStarted) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        {!isPresenting && (
+          <Box sx={previewStyles.container}>
+            <Box sx={previewStyles.questionsContainer}>
+              {gameState.questions.map((question) => {
+                // Initialize 3 empty lanes
+                const lanes: Array<SwipeeOption[]> = [[], [], []];
+                
+                // Distribute options using round-robin
+                question.options.forEach((option, index) => {
+                  const laneIndex = index % 3;
+                  lanes[laneIndex].push(option);
+                });
+
+                return (
+                  <Box key={question.id} sx={previewStyles.questionContainer}>
+                    <Box sx={previewStyles.lanesContainer}>
+                      {lanes.map((laneOptions, laneIndex) => (
+                        <Box key={laneIndex} sx={previewStyles.lane}>
+                          {laneOptions.map((option, optionIndex) => {
+                            return (
+                              <Box
+                                key={optionIndex}
+                                sx={{
+                                  ...previewStyles.option,
+                                  ...(option.isCorrect 
+                                    ? previewStyles.correctOption 
+                                    : previewStyles.incorrectOption),
+                                  position: 'relative',
+                                }}
+                              >
+                                {option.imageUrl ? (
+                                  <Box
+                                    component="img"
+                                    src={option.imageUrl}
+                                    alt={`Option ${optionIndex + 1}`}
+                                    sx={previewStyles.optionImage}
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.src = '/placeholder-image.png';
+                                    }}
+                                  />
+                                ) : (
+                                  <Box sx={{ 
+                                    ...previewStyles.optionImage,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    bgcolor: 'grey.100',
+                                  }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                      No Image
+                                    </Typography>
+                                  </Box>
+                                )}
+                                <Typography sx={previewStyles.optionTitle}>
+                                  {option.title}
+                                </Typography>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
+        {isPresenting && (
+          <Container maxWidth="sm" sx={{ 
+            py: 6,
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            color: COLORS.darkGray,
+          }}>
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                fontWeight: 700,
+                textAlign: 'center',
+                mb: 6,
+              }}
+            >
+              Game Results
+            </Typography>
+
+            <Box sx={{ width: '100%' }}>
+              {gameState.questions.map((question, index) => (
+                <Paper
+                  key={question.id}
+                  sx={{
+                    p: 3,
+                    mb: 3,
+                    bgcolor: 'white',
+                    borderRadius: 4,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                  }}
+                >
+                  <Typography 
+                    variant="h6" 
+                    sx={{ 
+                      mb: 2,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Question {index + 1}: {question.title}
+                  </Typography>
+
+                  <Box sx={{ 
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}>
+                    {question.options.map((option, optionIndex) => (
+                      <Box
+                        key={optionIndex}
+                        sx={{
+                          p: 2,
+                          borderRadius: 2,
+                          bgcolor: optionIndex === question.correctOptionIndex ? `${COLORS.teal}10` : 'grey.50',
+                          border: optionIndex === question.correctOptionIndex ? `2px solid ${COLORS.teal}` : 'none',
+                        }}
+                      >
+                        <Typography variant="body1" sx={{ mb: 1 }}>
+                          {option.title}
+                        </Typography>
+                        {option.imageUrl && (
+                          <Typography variant="body2" color="text.secondary">
+                            Image URL: {option.imageUrl}
+                          </Typography>
+                        )}
+                      </Box>
+                    ))}
+                  </Box>
+                </Paper>
+              ))}
+            </Box>
+
+            <Button
+              variant="contained"
+              startIcon={<PlayArrow />}
+              onClick={handleStartGame}
+              size="large"
+              sx={{
+                ...buttonStyle,
+                bgcolor: COLORS.teal,
+                '&:hover': {
+                  ...buttonStyle['&:hover'],
+                  bgcolor: COLORS.teal,
+                }
+              }}
+            >
+              Start Game
+            </Button>
+          </Container>
+        )}
       </Container>
     );
   }

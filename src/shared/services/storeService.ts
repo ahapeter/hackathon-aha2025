@@ -31,7 +31,6 @@ export class StoreService {
     type: string,
     configs: TConfig
   ): void {
-    console.log('Initializing game:', presentationId, slideId, type, configs);
     const store = this.loadStore();
     const key = getStoreKey(presentationId, slideId);
 

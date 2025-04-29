@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -15,7 +15,8 @@ import {
   CircularProgress,
   FormControlLabel,
   Divider,
-  Paper
+  Paper,
+  Radio
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Save as SaveIcon, BrokenImage as BrokenImageIcon } from '@mui/icons-material';
 import { APIService } from '@/shared/services/apiService';
@@ -31,6 +32,12 @@ interface EditPageProps {
 interface ImagePreviewProps {
   url: string;
   size?: number;
+}
+
+interface QuestionEditorProps {
+  question: SwipeeQuestion;
+  onUpdate: (updatedQuestion: SwipeeQuestion) => void;
+  onDelete: (questionId: string) => void;
 }
 
 // Add style constants
@@ -136,11 +143,131 @@ const ImagePreview = ({ url, size = 120 }: ImagePreviewProps) => {
   );
 };
 
+// Add style constants to match present page
+const optionStyles = {
+  container: {
+    p: 2,
+    borderRadius: 2,
+    transition: 'all 0.2s ease',
+    position: 'relative',
+    mb: 2,
+  },
+  correctOption: {
+    bgcolor: '#4CAF5010', // Light green background
+    border: '2px solid #4CAF50', // Green border
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      width: 16,
+      height: 16,
+      borderRadius: '50%',
+      bgcolor: '#4CAF50', // Green circle indicator
+    },
+  },
+  incorrectOption: {
+    bgcolor: '#F4433610', // Light red background
+    border: '2px solid #F44336', // Red border
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      width: 16,
+      height: 16,
+      borderRadius: '50%',
+      bgcolor: '#F44336', // Red circle indicator
+    },
+  },
+};
+
+const QuestionEditor = ({ question, onUpdate, onDelete }: QuestionEditorProps) => {
+  const [title, setTitle] = useState(question.title);
+  const [options, setOptions] = useState(question.options);
+
+  const handleOptionChange = (index: number, field: keyof SwipeeOption, value: any) => {
+    const newOptions = [...options] as [SwipeeOption, SwipeeOption];
+    if (field === 'isCorrect') {
+      // When setting an option as correct, make sure the other is incorrect
+      newOptions[0] = { ...newOptions[0], isCorrect: index === 0 };
+      newOptions[1] = { ...newOptions[1], isCorrect: index === 1 };
+    } else {
+      newOptions[index] = { ...newOptions[index], [field]: value };
+    }
+    setOptions(newOptions);
+    onUpdate({ ...question, options: newOptions });
+  };
+
+  return (
+    <Paper sx={{ p: 3, mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
+        <TextField
+          fullWidth
+          label="Question Title"
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            onUpdate({ ...question, title: e.target.value });
+          }}
+          sx={{ mb: 2 }}
+        />
+      </Box>
+
+      {options.map((option, index) => (
+        <Box 
+          key={index} 
+          sx={{ 
+            ...optionStyles.container,
+            ...(option.isCorrect ? optionStyles.correctOption : optionStyles.incorrectOption),
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <TextField
+              fullWidth
+              label={`Option ${index + 1} Title`}
+              value={option.title}
+              onChange={(e) => handleOptionChange(index, 'title', e.target.value)}
+            />
+            <TextField
+              fullWidth
+              label={`Option ${index + 1} Image URL`}
+              value={option.imageUrl}
+              onChange={(e) => handleOptionChange(index, 'imageUrl', e.target.value)}
+            />
+            <FormControlLabel
+              control={
+                <Radio
+                  checked={option.isCorrect}
+                  onChange={() => handleOptionChange(index, 'isCorrect', true)}
+                  sx={{
+                    '&.Mui-checked': {
+                      color: option.isCorrect ? '#4CAF50' : '#F44336'
+                    }
+                  }}
+                />
+              }
+              label="Correct"
+            />
+          </Box>
+        </Box>
+      ))}
+
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+        <IconButton onClick={() => onDelete(question.id)} color="error">
+          <DeleteIcon />
+        </IconButton>
+      </Box>
+    </Paper>
+  );
+};
+
 export default function EditPage({ searchParams }: EditPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<SwipeeQuestion[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Load current questions
   useEffect(() => {
@@ -167,13 +294,53 @@ export default function EditPage({ searchParams }: EditPageProps) {
     loadQuestions();
   }, [searchParams.presentationId, searchParams.slideId]);
 
+  // Auto-save effect
+  useEffect(() => {
+    if (questions.length === 0) return;
+
+    // Clear any existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set new timeout for saving
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setIsSaving(true);
+        setError(null);
+
+        const success = await APIService.initGame(
+          searchParams.presentationId,
+          searchParams.slideId,
+          { questions }
+        );
+
+        if (!success) {
+          setError('Failed to save questions. Please try again.');
+        }
+      } catch (err) {
+        setError('Failed to save questions. Please try again.');
+      } finally {
+        setIsSaving(false);
+      }
+    }, 200);
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [questions, searchParams.presentationId, searchParams.slideId]);
+
   const handleAddQuestion = () => {
     const newQuestion: SwipeeQuestion = {
-      id: `q${Date.now()}`,
+      id: Date.now().toString(),
+      title: '',
       options: [
-        { title: 'Option 1', imageUrl: '', isCorrect: true },
-        { title: 'Option 2', imageUrl: '', isCorrect: false }
-      ] as [SwipeeOption, SwipeeOption]  // Type assertion to ensure it's a tuple of 2
+        { title: '', imageUrl: '', isCorrect: true },  // First option defaults to correct
+        { title: '', imageUrl: '', isCorrect: false }
+      ]
     };
     setQuestions([...questions, newQuestion]);
   };
@@ -183,58 +350,8 @@ export default function EditPage({ searchParams }: EditPageProps) {
       // Remove from local state
       const newQuestions = questions.filter(q => q.id !== questionId);
       setQuestions(newQuestions);
-
-      // Sync with API
-      const success = await APIService.initGame(
-        searchParams.presentationId,
-        searchParams.slideId,
-        { questions: newQuestions }
-      );
-
-      if (!success) {
-        // Revert local state if API call fails
-        setQuestions(questions);
-        setError('Failed to delete question. Please try again.');
-      }
     } catch (err) {
-      // Revert local state on error
-      setQuestions(questions);
       setError('Failed to delete question. Please try again.');
-    }
-  };
-
-  const handleOptionChange = (questionId: string, optionIndex: number, field: keyof SwipeeOption, value: string | boolean) => {
-    setQuestions(questions.map(question => {
-      if (question.id === questionId) {
-        const newOptions = [...question.options] as [SwipeeOption, SwipeeOption];
-        newOptions[optionIndex] = {
-          ...newOptions[optionIndex],
-          [field]: value
-        };
-        return { ...question, options: newOptions };
-      }
-      return question;
-    }));
-  };
-
-  const handleSave = async () => {
-    try {
-      setIsSaving(true);
-      setError(null);
-
-      const success = await APIService.initGame(
-        searchParams.presentationId,
-        searchParams.slideId,
-        { questions }
-      );
-
-      if (!success) {
-        setError('Failed to save questions. Please try again.');
-      }
-    } catch (err) {
-      setError('Failed to save questions. Please try again.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -266,22 +383,14 @@ export default function EditPage({ searchParams }: EditPageProps) {
         >
           Edit Questions
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<SaveIcon />}
-          onClick={handleSave}
-          disabled={isSaving}
-          sx={{
-            ...buttonStyle,
-            bgcolor: COLORS.teal,
-            '&:hover': {
-              ...buttonStyle['&:hover'],
-              bgcolor: COLORS.teal,
-            }
-          }}
-        >
-          {isSaving ? 'Saving...' : 'Save Changes'}
-        </Button>
+        {isSaving && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={20} />
+            <Typography variant="body2" color="text.secondary">
+              Saving...
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       {error && (
@@ -299,132 +408,17 @@ export default function EditPage({ searchParams }: EditPageProps) {
       )}
 
       {questions.map((question, index) => (
-        <Card 
-          key={question.id} 
-          sx={{ 
-            ...cardStyle,
-            mb: 3,
+        <QuestionEditor
+          key={question.id}
+          question={question}
+          onUpdate={(updatedQuestion) => {
+            const newQuestions = questions.map(q => q.id === updatedQuestion.id ? updatedQuestion : q);
+            setQuestions(newQuestions);
           }}
-        >
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mb: 3,
-            }}>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  fontWeight: 600,
-                  color: COLORS.darkGray,
-                }}
-              >
-                Question {index + 1}
-              </Typography>
-              <IconButton
-                onClick={() => handleDeleteQuestion(question.id)}
-                sx={{ 
-                  color: COLORS.pink,
-                  '&:hover': {
-                    bgcolor: `${COLORS.pink}10`,
-                  }
-                }}
-              >
-                <DeleteIcon />
-              </IconButton>
-            </Box>
-
-            {question.options.map((option, optionIndex) => (
-              <Box 
-                key={optionIndex}
-                sx={{ 
-                  mb: optionIndex === 0 ? 3 : 0,
-                  p: 2,
-                  bgcolor: 'grey.50',
-                  borderRadius: 3,
-                }}
-              >
-                <Typography 
-                  variant="subtitle1" 
-                  sx={{ 
-                    mb: 2,
-                    fontWeight: 600,
-                    color: COLORS.darkGray,
-                  }}
-                >
-                  Option {optionIndex + 1}
-                </Typography>
-                <Box sx={{ 
-                  display: 'flex',
-                  gap: 3,
-                  flexDirection: { xs: 'column', sm: 'row' },
-                  alignItems: { xs: 'stretch', sm: 'flex-start' },
-                }}>
-                  <Box sx={{ flex: 1 }}>
-                    <TextField
-                      fullWidth
-                      label="Title"
-                      value={option.title}
-                      onChange={(e) => handleOptionChange(question.id, optionIndex, 'title', e.target.value)}
-                      sx={{ 
-                        mb: 2,
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2,
-                        }
-                      }}
-                    />
-                    <TextField
-                      fullWidth
-                      label="Image URL"
-                      value={option.imageUrl}
-                      onChange={(e) => handleOptionChange(question.id, optionIndex, 'imageUrl', e.target.value)}
-                      sx={{ 
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 2,
-                        }
-                      }}
-                    />
-                  </Box>
-                  <Box sx={{ 
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 2,
-                  }}>
-                    <ImagePreview url={option.imageUrl} size={160} />
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={option.isCorrect}
-                          onChange={(e) => handleOptionChange(question.id, optionIndex, 'isCorrect', e.target.checked)}
-                          sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': {
-                              color: COLORS.teal,
-                              '& + .MuiSwitch-track': {
-                                backgroundColor: COLORS.teal,
-                              },
-                            },
-                          }}
-                        />
-                      }
-                      label={
-                        <Typography 
-                          sx={{ 
-                            color: option.isCorrect ? COLORS.teal : COLORS.darkGray,
-                            fontWeight: 500,
-                          }}
-                        >
-                          Is Correct
-                        </Typography>
-                      }
-                    />
-                  </Box>
-                </Box>
-              </Box>
-            ))}
-          </CardContent>
-        </Card>
+          onDelete={(questionId) => {
+            handleDeleteQuestion(questionId);
+          }}
+        />
       ))}
 
       <Box sx={{ textAlign: 'center', mt: 4 }}>
